@@ -24,6 +24,16 @@ body {
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
 }
 
+.cv-section-keep-together {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cv-entry-keep-together {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 @media (max-width: 1023px) {
   .cv-paper {
     width: 210mm;
@@ -38,6 +48,10 @@ body {
 
   html,
   body {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 0;
     background: #ffffff;
   }
 
@@ -52,8 +66,15 @@ body {
   }
 
   main,
-  section {
-    background: transparent !important;
+  main > div,
+  main > div > section {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
   }
 
   .cv-paper {
@@ -62,5 +83,11 @@ body {
     margin: 0;
     padding: 18mm 18mm 20mm;
     box-shadow: none;
+  }
+
+  .cv-section-keep-together,
+  .cv-entry-keep-together {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
