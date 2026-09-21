@@ -2,6 +2,40 @@
 
 import { useState } from "react";
 
+type Experience = {
+  id: string;
+  role: string;
+  company: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+};
+
+type Education = {
+  id: string;
+  degree: string;
+  school: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  description: string;
+  link: string;
+};
+
+type Certification = {
+  id: string;
+  name: string;
+  issuer: string;
+  date: string;
+  link: string;
+};
+
 type CVData = {
   basics: {
     name: string;
@@ -15,36 +49,10 @@ type CVData = {
   };
   summary: string;
   skills: string[];
-  experience: {
-    id: string;
-    role: string;
-    company: string;
-    location: string;
-    startDate: string;
-    endDate: string;
-    description: string;
-  }[];
-  education: {
-    id: string;
-    degree: string;
-    school: string;
-    location: string;
-    startDate: string;
-    endDate: string;
-  }[];
-  projects: {
-    id: string;
-    name: string;
-    description: string;
-    link: string;
-  }[];
-  certifications: {
-    id: string;
-    name: string;
-    issuer: string;
-    date: string;
-    link: string;
-  }[];
+  experience: Experience[];
+  education: Education[];
+  projects: Project[];
+  certifications: Certification[];
 };
 
 const initialCV: CVData = {
@@ -66,9 +74,14 @@ const initialCV: CVData = {
   certifications: [],
 };
 
+function createId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default function Home() {
   const [cv, setCv] = useState<CVData>(initialCV);
   const [activeSection, setActiveSection] = useState("personal");
+  const [skillInput, setSkillInput] = useState("");
 
   function updateBasics(
     field: keyof CVData["basics"],
@@ -90,9 +103,190 @@ export default function Home() {
     }));
   }
 
+  function addSkill() {
+    const skill = skillInput.trim();
+
+    if (!skill) return;
+
+    setCv((current) => {
+      if (current.skills.includes(skill)) return current;
+
+      return {
+        ...current,
+        skills: [...current.skills, skill],
+      };
+    });
+
+    setSkillInput("");
+  }
+
+  function removeSkill(skill: string) {
+    setCv((current) => ({
+      ...current,
+      skills: current.skills.filter((item) => item !== skill),
+    }));
+  }
+
+  function addExperience() {
+    setCv((current) => ({
+      ...current,
+      experience: [
+        ...current.experience,
+        {
+          id: createId(),
+          role: "",
+          company: "",
+          location: "",
+          startDate: "",
+          endDate: "",
+          description: "",
+        },
+      ],
+    }));
+  }
+
+  function updateExperience(
+    id: string,
+    field: keyof Experience,
+    value: string,
+  ) {
+    setCv((current) => ({
+      ...current,
+      experience: current.experience.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
+    }));
+  }
+
+  function removeExperience(id: string) {
+    setCv((current) => ({
+      ...current,
+      experience: current.experience.filter((item) => item.id !== id),
+    }));
+  }
+
+  function addEducation() {
+    setCv((current) => ({
+      ...current,
+      education: [
+        ...current.education,
+        {
+          id: createId(),
+          degree: "",
+          school: "",
+          location: "",
+          startDate: "",
+          endDate: "",
+        },
+      ],
+    }));
+  }
+
+  function updateEducation(
+    id: string,
+    field: keyof Education,
+    value: string,
+  ) {
+    setCv((current) => ({
+      ...current,
+      education: current.education.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
+    }));
+  }
+
+  function removeEducation(id: string) {
+    setCv((current) => ({
+      ...current,
+      education: current.education.filter((item) => item.id !== id),
+    }));
+  }
+
+  function addProject() {
+    setCv((current) => ({
+      ...current,
+      projects: [
+        ...current.projects,
+        {
+          id: createId(),
+          name: "",
+          description: "",
+          link: "",
+        },
+      ],
+    }));
+  }
+
+  function updateProject(
+    id: string,
+    field: keyof Project,
+    value: string,
+  ) {
+    setCv((current) => ({
+      ...current,
+      projects: current.projects.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
+    }));
+  }
+
+  function removeProject(id: string) {
+    setCv((current) => ({
+      ...current,
+      projects: current.projects.filter((item) => item.id !== id),
+    }));
+  }
+
+  function addCertification() {
+    setCv((current) => ({
+      ...current,
+      certifications: [
+        ...current.certifications,
+        {
+          id: createId(),
+          name: "",
+          issuer: "",
+          date: "",
+          link: "",
+        },
+      ],
+    }));
+  }
+
+  function updateCertification(
+    id: string,
+    field: keyof Certification,
+    value: string,
+  ) {
+    setCv((current) => ({
+      ...current,
+      certifications: current.certifications.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
+    }));
+  }
+
+  function removeCertification(id: string) {
+    setCv((current) => ({
+      ...current,
+      certifications: current.certifications.filter(
+        (item) => item.id !== id,
+      ),
+    }));
+  }
+
+  const navigation = [
+    ["personal", "Personal"],
+    ["experience", "Experience"],
+    ["education", "Education"],
+    ["skills", "Skills"],
+    ["projects", "Projects"],
+    ["certifications", "Certifications"],
+  ];
+
   return (
     <main className="min-h-screen bg-[#f5f5f3] text-[#171717]">
-      <header className="sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur print:hidden">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 lg:px-8">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#73736e]">
@@ -114,7 +308,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto grid max-w-[1500px] lg:grid-cols-[430px_minmax(0,1fr)]">
-        <aside className="border-r border-[#deded9] bg-[#f5f5f3] lg:min-h-[calc(100vh-4rem)]">
+        <aside className="border-r border-[#deded9] bg-[#f5f5f3] print:hidden lg:min-h-[calc(100vh-4rem)]">
           <div className="p-5 lg:p-7">
             <div className="mb-7">
               <p className="text-sm text-[#73736e]">
@@ -122,12 +316,8 @@ export default function Home() {
               </p>
             </div>
 
-            <nav className="mb-8 grid grid-cols-3 gap-1 rounded-lg bg-[#e9e9e5] p-1">
-              {[
-                ["personal", "Personal"],
-                ["experience", "Experience"],
-                ["education", "Education"],
-              ].map(([id, label]) => (
+            <nav className="mb-8 grid grid-cols-2 gap-1 rounded-lg bg-[#e9e9e5] p-1 sm:grid-cols-3">
+              {navigation.map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -215,25 +405,94 @@ export default function Home() {
             )}
 
             {activeSection === "experience" && (
-              <EmptyEditorSection
-                title="Experience"
-                description="Your work history will appear here."
+              <ExperienceEditor
+                items={cv.experience}
+                onAdd={addExperience}
+                onUpdate={updateExperience}
+                onRemove={removeExperience}
               />
             )}
 
             {activeSection === "education" && (
-              <EmptyEditorSection
-                title="Education"
-                description="Your education history will appear here."
+              <EducationEditor
+                items={cv.education}
+                onAdd={addEducation}
+                onUpdate={updateEducation}
+                onRemove={removeEducation}
               />
             )}
 
-            <div className="mt-10 border-t border-[#deded9] pt-5">
-              <p className="text-xs leading-5 text-[#8a8a84]">
-                Your CV preview updates as you type. More sections will be
-                added in the next build step.
-              </p>
-            </div>
+            {activeSection === "skills" && (
+              <EditorGroup
+                title="Skills"
+                description="Add the skills that are relevant to the role you're applying for."
+              >
+                <div className="flex gap-2">
+                  <input
+                    value={skillInput}
+                    onChange={(event) =>
+                      setSkillInput(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addSkill();
+                      }
+                    }}
+                    placeholder="e.g. TypeScript"
+                    className="min-w-0 flex-1 border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#777]"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={addSkill}
+                    className="bg-[#171717] px-4 text-sm font-medium text-white"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {cv.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {cv.skills.map((skill) => (
+                      <button
+                        key={skill}
+                        type="button"
+                        onClick={() => removeSkill(skill)}
+                        className="border border-[#d2d2cc] bg-white px-3 py-1.5 text-xs hover:border-[#999]"
+                        title="Remove skill"
+                      >
+                        {skill} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {cv.skills.length === 0 && (
+                  <EmptyText>
+                    No skills added yet. Add your most relevant skills.
+                  </EmptyText>
+                )}
+              </EditorGroup>
+            )}
+
+            {activeSection === "projects" && (
+              <ProjectEditor
+                items={cv.projects}
+                onAdd={addProject}
+                onUpdate={updateProject}
+                onRemove={removeProject}
+              />
+            )}
+
+            {activeSection === "certifications" && (
+              <CertificationEditor
+                items={cv.certifications}
+                onAdd={addCertification}
+                onUpdate={updateCertification}
+                onRemove={removeCertification}
+              />
+            )}
           </div>
         </aside>
 
@@ -283,45 +542,493 @@ function CVPreview({ cv }: { cv: CVData }) {
         </CVSection>
       )}
 
-      <CVSection title="Experience">
-        <div className="space-y-4">
-          <div>
-            <div className="flex justify-between gap-6">
-              <div>
-                <p className="font-semibold text-[#111]">
-                  Your most recent role
-                </p>
-                <p className="mt-0.5">Company Name</p>
+      {cv.experience.length > 0 && (
+        <CVSection title="Experience">
+          <div className="space-y-4">
+            {cv.experience.map((item) => (
+              <div key={item.id}>
+                <div className="flex justify-between gap-6">
+                  <div>
+                    <p className="font-semibold text-[#111]">
+                      {item.role || "Role"}
+                    </p>
+
+                    <p className="mt-0.5">
+                      {item.company || "Company"}
+                      {item.location
+                        ? ` · ${item.location}`
+                        : ""}
+                    </p>
+                  </div>
+
+                  {(item.startDate || item.endDate) && (
+                    <p className="whitespace-nowrap text-[10px] text-[#666]">
+                      {item.startDate}
+                      {item.startDate || item.endDate ? " — " : ""}
+                      {item.endDate}
+                    </p>
+                  )}
+                </div>
+
+                {item.description && (
+                  <p className="mt-2 whitespace-pre-line">
+                    {item.description}
+                  </p>
+                )}
               </div>
+            ))}
+          </div>
+        </CVSection>
+      )}
 
-              <p className="whitespace-nowrap text-[10px] text-[#666]">
-                Start — Present
-              </p>
-            </div>
+      {cv.projects.length > 0 && (
+        <CVSection title="Projects">
+          <div className="space-y-4">
+            {cv.projects.map((item) => (
+              <div key={item.id}>
+                <p className="font-semibold text-[#111]">
+                  {item.name || "Project"}
+                </p>
 
-            <p className="mt-2 text-[#777]">
-              Add your work experience from the editor. Your responsibilities
-              and achievements will appear here.
+                {item.description && (
+                  <p className="mt-1 whitespace-pre-line">
+                    {item.description}
+                  </p>
+                )}
+
+                {item.link && (
+                  <p className="mt-1 text-[10px] text-[#666]">
+                    {item.link}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </CVSection>
+      )}
+
+      {cv.education.length > 0 && (
+        <CVSection title="Education">
+          <div className="space-y-4">
+            {cv.education.map((item) => (
+              <div key={item.id}>
+                <div className="flex justify-between gap-6">
+                  <div>
+                    <p className="font-semibold text-[#111]">
+                      {item.degree || "Degree or qualification"}
+                    </p>
+
+                    <p className="mt-0.5">
+                      {item.school || "Institution"}
+                      {item.location
+                        ? ` · ${item.location}`
+                        : ""}
+                    </p>
+                  </div>
+
+                  {(item.startDate || item.endDate) && (
+                    <p className="whitespace-nowrap text-[10px] text-[#666]">
+                      {item.startDate}
+                      {item.startDate || item.endDate ? " — " : ""}
+                      {item.endDate}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CVSection>
+      )}
+
+      {cv.certifications.length > 0 && (
+        <CVSection title="Certifications">
+          <div className="space-y-3">
+            {cv.certifications.map((item) => (
+              <div key={item.id}>
+                <p className="font-semibold text-[#111]">
+                  {item.name || "Certification"}
+                </p>
+
+                <p>
+                  {item.issuer}
+                  {item.date ? ` · ${item.date}` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        </CVSection>
+      )}
+
+      {cv.skills.length > 0 && (
+        <CVSection title="Skills">
+          <p>{cv.skills.join(" · ")}</p>
+        </CVSection>
+      )}
+    </article>
+  );
+}
+
+function ExperienceEditor({
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  items: Experience[];
+  onAdd: () => void;
+  onUpdate: (
+    id: string,
+    field: keyof Experience,
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <EditorGroup
+      title="Experience"
+      description="Start with your most recent or most relevant work experience."
+    >
+      <AddButton onClick={onAdd}>Add experience</AddButton>
+
+      {items.length === 0 && (
+        <EmptyText>No experience added yet.</EmptyText>
+      )}
+
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
+              Experience {index + 1}
             </p>
+
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="text-xs text-[#8a3b3b] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+
+          <Field
+            label="Role"
+            value={item.role}
+            onChange={(value) =>
+              onUpdate(item.id, "role", value)
+            }
+            placeholder="e.g. Frontend Developer"
+          />
+
+          <Field
+            label="Company"
+            value={item.company}
+            onChange={(value) =>
+              onUpdate(item.id, "company", value)
+            }
+            placeholder="Company name"
+          />
+
+          <Field
+            label="Location"
+            value={item.location}
+            onChange={(value) =>
+              onUpdate(item.id, "location", value)
+            }
+            placeholder="City, Country"
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Start"
+              value={item.startDate}
+              onChange={(value) =>
+                onUpdate(item.id, "startDate", value)
+              }
+              placeholder="Jan 2024"
+            />
+
+            <Field
+              label="End"
+              value={item.endDate}
+              onChange={(value) =>
+                onUpdate(item.id, "endDate", value)
+              }
+              placeholder="Present"
+            />
+          </div>
+
+          <Textarea
+            value={item.description}
+            onChange={(value) =>
+              onUpdate(item.id, "description", value)
+            }
+            placeholder="Describe your responsibilities, achievements and measurable results."
+          />
+        </div>
+      ))}
+    </EditorGroup>
+  );
+}
+
+function EducationEditor({
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  items: Education[];
+  onAdd: () => void;
+  onUpdate: (
+    id: string,
+    field: keyof Education,
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <EditorGroup
+      title="Education"
+      description="Add your relevant academic or professional qualifications."
+    >
+      <AddButton onClick={onAdd}>Add education</AddButton>
+
+      {items.length === 0 && (
+        <EmptyText>No education added yet.</EmptyText>
+      )}
+
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
+              Education {index + 1}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="text-xs text-[#8a3b3b] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+
+          <Field
+            label="Degree / qualification"
+            value={item.degree}
+            onChange={(value) =>
+              onUpdate(item.id, "degree", value)
+            }
+            placeholder="e.g. B.Sc. Computer Science"
+          />
+
+          <Field
+            label="School / institution"
+            value={item.school}
+            onChange={(value) =>
+              onUpdate(item.id, "school", value)
+            }
+            placeholder="Institution name"
+          />
+
+          <Field
+            label="Location"
+            value={item.location}
+            onChange={(value) =>
+              onUpdate(item.id, "location", value)
+            }
+            placeholder="City, Country"
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Start"
+              value={item.startDate}
+              onChange={(value) =>
+                onUpdate(item.id, "startDate", value)
+              }
+              placeholder="2020"
+            />
+
+            <Field
+              label="End"
+              value={item.endDate}
+              onChange={(value) =>
+                onUpdate(item.id, "endDate", value)
+              }
+              placeholder="2024"
+            />
           </div>
         </div>
-      </CVSection>
+      ))}
+    </EditorGroup>
+  );
+}
 
-      <CVSection title="Education">
-        <div>
-          <p className="font-semibold text-[#111]">
-            Your degree or qualification
-          </p>
-          <p className="mt-0.5">Institution Name</p>
+function ProjectEditor({
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  items: Project[];
+  onAdd: () => void;
+  onUpdate: (
+    id: string,
+    field: keyof Project,
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <EditorGroup
+      title="Projects"
+      description="Showcase relevant work, personal projects or major accomplishments."
+    >
+      <AddButton onClick={onAdd}>Add project</AddButton>
+
+      {items.length === 0 && (
+        <EmptyText>No projects added yet.</EmptyText>
+      )}
+
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
+              Project {index + 1}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="text-xs text-[#8a3b3b] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+
+          <Field
+            label="Project name"
+            value={item.name}
+            onChange={(value) =>
+              onUpdate(item.id, "name", value)
+            }
+            placeholder="Project name"
+          />
+
+          <Textarea
+            value={item.description}
+            onChange={(value) =>
+              onUpdate(item.id, "description", value)
+            }
+            placeholder="What did you build, improve or accomplish?"
+          />
+
+          <Field
+            label="Link"
+            value={item.link}
+            onChange={(value) =>
+              onUpdate(item.id, "link", value)
+            }
+            placeholder="https://..."
+          />
         </div>
-      </CVSection>
+      ))}
+    </EditorGroup>
+  );
+}
 
-      <CVSection title="Skills">
-        <p className="text-[#777]">
-          Your professional skills will appear here.
-        </p>
-      </CVSection>
-    </article>
+function CertificationEditor({
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  items: Certification[];
+  onAdd: () => void;
+  onUpdate: (
+    id: string,
+    field: keyof Certification,
+    value: string,
+  ) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <EditorGroup
+      title="Certifications"
+      description="Add professional certifications, courses or credentials."
+    >
+      <AddButton onClick={onAdd}>Add certification</AddButton>
+
+      {items.length === 0 && (
+        <EmptyText>No certifications added yet.</EmptyText>
+      )}
+
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
+              Certification {index + 1}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="text-xs text-[#8a3b3b] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+
+          <Field
+            label="Certification"
+            value={item.name}
+            onChange={(value) =>
+              onUpdate(item.id, "name", value)
+            }
+            placeholder="Certification name"
+          />
+
+          <Field
+            label="Issuer"
+            value={item.issuer}
+            onChange={(value) =>
+              onUpdate(item.id, "issuer", value)
+            }
+            placeholder="Issuing organization"
+          />
+
+          <Field
+            label="Date"
+            value={item.date}
+            onChange={(value) =>
+              onUpdate(item.id, "date", value)
+            }
+            placeholder="2025"
+          />
+
+          <Field
+            label="Link"
+            value={item.link}
+            onChange={(value) =>
+              onUpdate(item.id, "link", value)
+            }
+            placeholder="https://..."
+          />
+        </div>
+      ))}
+    </EditorGroup>
   );
 }
 
@@ -358,6 +1065,7 @@ function EditorGroup({
     <section>
       <div className="mb-4">
         <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+
         <p className="mt-1 text-xs leading-5 text-[#7a7a74]">
           {description}
         </p>
@@ -368,21 +1076,21 @@ function EditorGroup({
   );
 }
 
-function EmptyEditorSection({
-  title,
-  description,
+function AddButton({
+  children,
+  onClick,
 }: {
-  title: string;
-  description: string;
+  children: React.ReactNode;
+  onClick: () => void;
 }) {
   return (
-    <section className="border border-dashed border-[#c9c9c3] bg-white/50 p-6">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="mt-1 text-xs leading-5 text-[#777]">{description}</p>
-      <p className="mt-5 text-xs font-medium text-[#555]">
-        This section is coming in the next build step.
-      </p>
-    </section>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full border border-[#bdbdb7] bg-white px-4 py-2.5 text-sm font-medium transition hover:border-[#777] hover:bg-[#fafaf8]"
+    >
+      + {children}
+    </button>
   );
 }
 
@@ -430,5 +1138,13 @@ function Textarea({
       rows={6}
       className="w-full resize-y border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
     />
+  );
+}
+
+function EmptyText({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="border border-dashed border-[#d2d2cc] px-4 py-4 text-xs leading-5 text-[#777]">
+      {children}
+    </p>
   );
 }
