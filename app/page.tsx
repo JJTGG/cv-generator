@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 
 type Experience = {
   id: string;
@@ -55,6 +55,13 @@ type CVData = {
   certifications: Certification[];
 };
 
+type StoredCV = {
+  version: 1;
+  data: CVData;
+};
+
+const STORAGE_KEY = "cv-studio-document";
+
 const initialCV: CVData = {
   basics: {
     name: "",
@@ -78,10 +85,89 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function cloneInitialCV(): CVData {
+  return JSON.parse(JSON.stringify(initialCV));
+}
+
+function isValidCVData(value: unknown): value is CVData {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Partial<CVData>;
+
+  return (
+    typeof candidate.basics === "object" &&
+    candidate.basics !== null &&
+    typeof candidate.summary === "string" &&
+    Array.isArray(candidate.skills) &&
+    Array.isArray(candidate.experience) &&
+    Array.isArray(candidate.education) &&
+    Array.isArray(candidate.projects) &&
+    Array.isArray(candidate.certifications)
+  );
+}
+
 export default function Home() {
   const [cv, setCv] = useState<CVData>(initialCV);
   const [activeSection, setActiveSection] = useState("personal");
   const [skillInput, setSkillInput] = useState("");
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [saveState, setSaveState] = useState<
+    "loading" | "saved" | "saving"
+  >("loading");
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "data" in parsed &&
+          isValidCVData(parsed.data)
+        ) {
+          setCv(parsed.data);
+        } else if (isValidCVData(parsed)) {
+          setCv(parsed);
+        }
+      }
+    } catch {
+      // Ignore invalid or unavailable local storage data.
+    } finally {
+      setHasLoaded(true);
+      setSaveState("saved");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoaded) return;
+
+    setSaveState("saving");
+
+    const timeout = window.setTimeout(() => {
+      try {
+        const stored: StoredCV = {
+          version: 1,
+          data: cv,
+        };
+
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(stored),
+        );
+
+        setSaveState("saved");
+      } catch {
+        setSaveState("saved");
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [cv, hasLoaded]);
 
   function updateBasics(
     field: keyof CVData["basics"],
@@ -275,6 +361,86 @@ export default function Home() {
     }));
   }
 
+  function resetCV() {
+    const confirmed = window.confirm(
+      "Reset this CV? All saved CV data in this browser will be deleted.",
+    );
+
+    if (!confirmed) return;
+
+    setCv(cloneInitialCV());
+    setActiveSection("personal");
+    setSkillInput("");
+  }
+
+  function exportJSON() {
+    const stored: StoredCV = {
+      version: 1,
+      data: cv,
+    };
+
+    const blob = new Blob([JSON.stringify(stored, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "cv-studio-document.json";
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function openImportPicker() {
+    importInputRef.current?.click();
+  }
+
+  async function importJSON(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed: unknown = JSON.parse(text);
+
+      let importedData: CVData | null = null;
+
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "data" in parsed &&
+        isValidCVData(parsed.data)
+      ) {
+        importedData = parsed.data;
+      } else if (isValidCVData(parsed)) {
+        importedData = parsed;
+      }
+
+      if (!importedData) {
+        window.alert(
+          "This file does not contain a valid CV Studio document.",
+        );
+        return;
+      }
+
+      setCv(importedData);
+      setActiveSection("personal");
+    } catch {
+      window.alert(
+        "The selected file could not be imported. Make sure it is a valid CV JSON file.",
+      );
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  function printCV() {
+    window.print();
+  }
+
   const navigation = [
     ["personal", "Personal"],
     ["experience", "Experience"],
@@ -287,7 +453,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f5f5f3] text-[#171717]">
       <header className="sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between px-5 lg:px-8">
+        <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-4 px-5 lg:px-8">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#73736e]">
               CV Studio
@@ -297,13 +463,45 @@ export default function Home() {
             </h1>
           </div>
 
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#30302d]"
-          >
-            Save PDF
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-xs text-[#777] sm:inline">
+              {saveState === "loading" && "Loading…"}
+              {saveState === "saving" && "Saving…"}
+              {saveState === "saved" && "Saved locally"}
+            </span>
+
+            <button
+              type="button"
+              onClick={exportJSON}
+              className="hidden rounded-md border border-[#c9c9c3] bg-white px-3 py-2 text-xs font-medium transition hover:border-[#999] sm:inline-flex"
+            >
+              Export
+            </button>
+
+            <button
+              type="button"
+              onClick={openImportPicker}
+              className="hidden rounded-md border border-[#c9c9c3] bg-white px-3 py-2 text-xs font-medium transition hover:border-[#999] sm:inline-flex"
+            >
+              Import
+            </button>
+
+            <button
+              type="button"
+              onClick={printCV}
+              className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#30302d]"
+            >
+              Save PDF
+            </button>
+
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={importJSON}
+              className="hidden"
+            />
+          </div>
         </div>
       </header>
 
@@ -401,6 +599,16 @@ export default function Home() {
                     placeholder="Write 2–4 sentences about your professional background, strengths and focus."
                   />
                 </EditorGroup>
+
+                <div className="border-t border-[#deded9] pt-6">
+                  <button
+                    type="button"
+                    onClick={resetCV}
+                    className="w-full border border-[#d1bcbc] bg-white px-4 py-2.5 text-sm font-medium text-[#7d3838] transition hover:border-[#a66] hover:bg-[#fffafa]"
+                  >
+                    Reset CV
+                  </button>
+                </div>
               </div>
             )}
 
@@ -496,7 +704,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10">
+        <section className="min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10 print:bg-white print:p-0">
           <div className="mx-auto w-fit">
             <CVPreview cv={cv} />
           </div>
@@ -516,7 +724,7 @@ function CVPreview({ cv }: { cv: CVData }) {
 
   return (
     <article className="cv-paper">
-      <header className="border-b-[1.5px] border-[#222] pb-5">
+      <header className="cv-section-keep-together border-b-[1.5px] border-[#222] pb-5">
         <h2 className="text-[30px] font-semibold tracking-[-0.035em] text-[#111]">
           {cv.basics.name || "Your Name"}
         </h2>
@@ -546,7 +754,7 @@ function CVPreview({ cv }: { cv: CVData }) {
         <CVSection title="Experience">
           <div className="space-y-4">
             {cv.experience.map((item) => (
-              <div key={item.id}>
+              <div key={item.id} className="cv-entry-keep-together">
                 <div className="flex justify-between gap-6">
                   <div>
                     <p className="font-semibold text-[#111]">
@@ -555,9 +763,7 @@ function CVPreview({ cv }: { cv: CVData }) {
 
                     <p className="mt-0.5">
                       {item.company || "Company"}
-                      {item.location
-                        ? ` · ${item.location}`
-                        : ""}
+                      {item.location ? ` · ${item.location}` : ""}
                     </p>
                   </div>
 
@@ -585,7 +791,7 @@ function CVPreview({ cv }: { cv: CVData }) {
         <CVSection title="Projects">
           <div className="space-y-4">
             {cv.projects.map((item) => (
-              <div key={item.id}>
+              <div key={item.id} className="cv-entry-keep-together">
                 <p className="font-semibold text-[#111]">
                   {item.name || "Project"}
                 </p>
@@ -611,7 +817,7 @@ function CVPreview({ cv }: { cv: CVData }) {
         <CVSection title="Education">
           <div className="space-y-4">
             {cv.education.map((item) => (
-              <div key={item.id}>
+              <div key={item.id} className="cv-entry-keep-together">
                 <div className="flex justify-between gap-6">
                   <div>
                     <p className="font-semibold text-[#111]">
@@ -620,9 +826,7 @@ function CVPreview({ cv }: { cv: CVData }) {
 
                     <p className="mt-0.5">
                       {item.school || "Institution"}
-                      {item.location
-                        ? ` · ${item.location}`
-                        : ""}
+                      {item.location ? ` · ${item.location}` : ""}
                     </p>
                   </div>
 
@@ -644,7 +848,7 @@ function CVPreview({ cv }: { cv: CVData }) {
         <CVSection title="Certifications">
           <div className="space-y-3">
             {cv.certifications.map((item) => (
-              <div key={item.id}>
+              <div key={item.id} className="cv-entry-keep-together">
                 <p className="font-semibold text-[#111]">
                   {item.name || "Certification"}
                 </p>
@@ -716,27 +920,21 @@ function ExperienceEditor({
           <Field
             label="Role"
             value={item.role}
-            onChange={(value) =>
-              onUpdate(item.id, "role", value)
-            }
+            onChange={(value) => onUpdate(item.id, "role", value)}
             placeholder="e.g. Frontend Developer"
           />
 
           <Field
             label="Company"
             value={item.company}
-            onChange={(value) =>
-              onUpdate(item.id, "company", value)
-            }
+            onChange={(value) => onUpdate(item.id, "company", value)}
             placeholder="Company name"
           />
 
           <Field
             label="Location"
             value={item.location}
-            onChange={(value) =>
-              onUpdate(item.id, "location", value)
-            }
+            onChange={(value) => onUpdate(item.id, "location", value)}
             placeholder="City, Country"
           />
 
@@ -761,6 +959,7 @@ function ExperienceEditor({
           </div>
 
           <Textarea
+            label="Description"
             value={item.description}
             onChange={(value) =>
               onUpdate(item.id, "description", value)
@@ -918,13 +1117,12 @@ function ProjectEditor({
           <Field
             label="Project name"
             value={item.name}
-            onChange={(value) =>
-              onUpdate(item.id, "name", value)
-            }
+            onChange={(value) => onUpdate(item.id, "name", value)}
             placeholder="Project name"
           />
 
           <Textarea
+            label="Description"
             value={item.description}
             onChange={(value) =>
               onUpdate(item.id, "description", value)
@@ -935,9 +1133,7 @@ function ProjectEditor({
           <Field
             label="Link"
             value={item.link}
-            onChange={(value) =>
-              onUpdate(item.id, "link", value)
-            }
+            onChange={(value) => onUpdate(item.id, "link", value)}
             placeholder="https://..."
           />
         </div>
@@ -1040,7 +1236,7 @@ function CVSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-7">
+    <section className="cv-section-keep-together mt-7">
       <h3 className="mb-3 border-b border-[#d7d7d2] pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#222]">
         {title}
       </h3>
@@ -1122,22 +1318,32 @@ function Field({
 }
 
 function Textarea({
+  label,
   value,
   onChange,
   placeholder,
 }: {
+  label?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
   return (
-    <textarea
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      rows={6}
-      className="w-full resize-y border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
-    />
+    <label className="block">
+      {label && (
+        <span className="mb-1.5 block text-[11px] font-medium text-[#555]">
+          {label}
+        </span>
+      )}
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={6}
+        className="w-full resize-y border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
+      />
+    </label>
   );
 }
 
