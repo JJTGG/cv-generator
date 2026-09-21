@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+:root {
+  background: #f5f5f3;
+  color: #171717;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.cv-paper {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 18mm 18mm 20mm;
+  background: #ffffff;
+  color: #333333;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 1023px) {
+  .cv-paper {
+    width: 210mm;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html,
+  body {
+    background: #ffffff;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header,
+  aside {
+    display: none !important;
+  }
+
+  main,
+  section {
+    background: transparent !important;
+  }
+
+  .cv-paper {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 18mm 18mm 20mm;
+    box-shadow: none;
+  }
+}
