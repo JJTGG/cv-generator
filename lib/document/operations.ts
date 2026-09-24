@@ -19,7 +19,11 @@ export function getSection(
 export function getBasics(document: CVDocument): CVBasics {
   const section = getSection(document, "basics");
 
-  if (section && typeof section.data === "object" && !Array.isArray(section.data)) {
+  if (
+    section &&
+    typeof section.data === "object" &&
+    !Array.isArray(section.data)
+  ) {
     return section.data as CVBasics;
   }
 
@@ -37,32 +41,45 @@ export function getBasics(document: CVDocument): CVBasics {
 
 export function getSummary(document: CVDocument): string {
   const section = getSection(document, "summary");
-  return typeof section?.data === "string" ? section.data : "";
+
+  return typeof section?.data === "string"
+    ? section.data
+    : "";
 }
 
 export function getSkills(document: CVDocument): string[] {
   const section = getSection(document, "skills");
+
   return Array.isArray(section?.data)
     ? (section.data as string[])
     : [];
 }
 
-export function getExperience(document: CVDocument): Experience[] {
+export function getExperience(
+  document: CVDocument,
+): Experience[] {
   const section = getSection(document, "experience");
+
   return Array.isArray(section?.data)
     ? (section.data as Experience[])
     : [];
 }
 
-export function getEducation(document: CVDocument): Education[] {
+export function getEducation(
+  document: CVDocument,
+): Education[] {
   const section = getSection(document, "education");
+
   return Array.isArray(section?.data)
     ? (section.data as Education[])
     : [];
 }
 
-export function getProjects(document: CVDocument): Project[] {
+export function getProjects(
+  document: CVDocument,
+): Project[] {
   const section = getSection(document, "projects");
+
   return Array.isArray(section?.data)
     ? (section.data as Project[])
     : [];
@@ -71,14 +88,17 @@ export function getProjects(document: CVDocument): Project[] {
 export function getCertifications(
   document: CVDocument,
 ): Certification[] {
-  const section = getSection(document, "certifications");
+  const section = getSection(
+    document,
+    "certifications",
+  );
 
   return Array.isArray(section?.data)
     ? (section.data as Certification[])
     : [];
 }
 
-export function updateSectionData(
+function updateSection(
   document: CVDocument,
   type: CVSectionType,
   data: CVSection["data"],
@@ -101,58 +121,88 @@ export function updateBasics(
 ): CVDocument {
   const basics = getBasics(document);
 
-  return updateSectionData(document, "basics", {
-    ...basics,
-    [field]: value,
-  });
+  return updateSection(
+    document,
+    "basics",
+    {
+      ...basics,
+      [field]: value,
+    },
+  );
 }
 
 export function updateSummary(
   document: CVDocument,
   value: string,
 ): CVDocument {
-  return updateSectionData(document, "summary", value);
+  return updateSection(
+    document,
+    "summary",
+    value,
+  );
 }
 
 export function updateSkills(
   document: CVDocument,
   skills: string[],
 ): CVDocument {
-  return updateSectionData(document, "skills", skills);
+  return updateSection(
+    document,
+    "skills",
+    skills,
+  );
 }
 
 export function updateExperience(
   document: CVDocument,
   items: Experience[],
 ): CVDocument {
-  return updateSectionData(document, "experience", items);
+  return updateSection(
+    document,
+    "experience",
+    items,
+  );
 }
 
 export function updateEducation(
   document: CVDocument,
   items: Education[],
 ): CVDocument {
-  return updateSectionData(document, "education", items);
+  return updateSection(
+    document,
+    "education",
+    items,
+  );
 }
 
 export function updateProjects(
   document: CVDocument,
   items: Project[],
 ): CVDocument {
-  return updateSectionData(document, "projects", items);
+  return updateSection(
+    document,
+    "projects",
+    items,
+  );
 }
 
 export function updateCertifications(
   document: CVDocument,
   items: Certification[],
 ): CVDocument {
-  return updateSectionData(document, "certifications", items);
+  return updateSection(
+    document,
+    "certifications",
+    items,
+  );
 }
 
 export function createDocumentFromLegacyCV(
   value: unknown,
 ): CVDocument | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object") {
+    return null;
+  }
 
   const legacy = value as Record<string, unknown>;
   const basics = legacy.basics;
@@ -174,7 +224,9 @@ export function createDocumentFromLegacyCV(
   const now = new Date().toISOString();
 
   return {
-    id: `cv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `cv-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
     name: "Untitled CV",
     version: 1,
     createdAt: now,
