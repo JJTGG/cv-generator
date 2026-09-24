@@ -13,7 +13,6 @@ import type {
 } from "@/lib/document/types";
 import {
   createDefaultDocument,
-  createDefaultSections,
 } from "@/lib/document/defaults";
 import {
   createDocumentFromLegacyCV,
@@ -34,13 +33,19 @@ import {
   updateSummary,
 } from "@/lib/document/operations";
 import { isValidCVDocument } from "@/lib/document/validation";
-import { loadDocument, removeDocument, saveDocument } from "@/lib/persistence/localStorage";
+import {
+  loadDocument,
+  removeDocument,
+  saveDocument,
+} from "@/lib/persistence/localStorage";
 import { ProfessionalTemplate } from "@/components/preview/templates/ProfessionalTemplate";
 
 const STORAGE_KEY = "cv-studio-document";
 
 function createItemId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 function EditorField({
@@ -115,7 +120,9 @@ function EditorSection({
   return (
     <section className="border-b border-gray-200 px-5 py-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        <h2 className="text-sm font-semibold text-gray-900">
+          {title}
+        </h2>
         {action}
       </div>
 
@@ -140,7 +147,11 @@ function ItemActions({
   );
 }
 
-function EmptyState({ children }: { children: ReactNode }) {
+function EmptyState({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <p className="text-sm leading-relaxed text-gray-500">
       {children}
@@ -152,6 +163,7 @@ export default function HomePage() {
   const [cv, setCv] = useState<CVDocument | null>(null);
   const [ready, setReady] = useState(false);
   const [importError, setImportError] = useState("");
+  const [skillInput, setSkillInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -159,10 +171,15 @@ export default function HomePage() {
 
     if (!document) {
       try {
-        const legacyRaw = window.localStorage.getItem(STORAGE_KEY);
+        const legacyRaw =
+          window.localStorage.getItem(STORAGE_KEY);
+
         if (legacyRaw) {
-          const legacyParsed: unknown = JSON.parse(legacyRaw);
-          const migrated = createDocumentFromLegacyCV(legacyParsed);
+          const legacyParsed: unknown =
+            JSON.parse(legacyRaw);
+
+          const migrated =
+            createDocumentFromLegacyCV(legacyParsed);
 
           if (migrated) {
             document = migrated;
@@ -192,29 +209,80 @@ export default function HomePage() {
     return () => window.clearTimeout(timeout);
   }, [cv, ready]);
 
-  function updateDocument(nextDocument: CVDocument) {
+  function updateDocument(
+    nextDocument: CVDocument,
+  ) {
     setCv(nextDocument);
   }
 
-  function handleBasicsChange(field: keyof CVBasics, value: string) {
+  function handleBasicsChange(
+    field: keyof CVBasics,
+    value: string,
+  ) {
     if (!cv) return;
-    updateDocument(updateBasics(cv, field, value));
+
+    updateDocument(
+      updateBasics(cv, field, value),
+    );
   }
 
   function handleSummaryChange(value: string) {
     if (!cv) return;
-    updateDocument(updateSummary(cv, value));
+
+    updateDocument(
+      updateSummary(cv, value),
+    );
   }
 
-  function handleSkillsChange(value: string) {
+  function addSkill() {
     if (!cv) return;
 
-    const skills = value
-      .split(",")
-      .map((skill) => skill.trim())
-      .filter(Boolean);
+    const skill = skillInput.trim();
 
-    updateDocument(updateSkills(cv, skills));
+    if (!skill) return;
+
+    const existingSkills = getSkills(cv);
+
+    if (
+      existingSkills.some(
+        (item) =>
+          item.toLowerCase() === skill.toLowerCase(),
+      )
+    ) {
+      setSkillInput("");
+      return;
+    }
+
+    updateDocument(
+      updateSkills(cv, [
+        ...existingSkills,
+        skill,
+      ]),
+    );
+
+    setSkillInput("");
+  }
+
+  function handleSkillInputKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addSkill();
+    }
+  }
+
+  function removeSkill(skillToRemove: string) {
+    if (!cv) return;
+
+    updateDocument(
+      updateSkills(
+        cv,
+        getSkills(cv).filter(
+          (skill) => skill !== skillToRemove,
+        ),
+      ),
+    );
   }
 
   function handleExperienceChange(
@@ -224,16 +292,19 @@ export default function HomePage() {
   ) {
     if (!cv) return;
 
-    const experience = getExperience(cv).map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            [field]: value,
-          }
-        : item,
+    const experience = getExperience(cv).map(
+      (item) =>
+        item.id === id
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
     );
 
-    updateDocument(updateExperience(cv, experience));
+    updateDocument(
+      updateExperience(cv, experience),
+    );
   }
 
   function addExperience() {
@@ -252,7 +323,9 @@ export default function HomePage() {
       },
     ];
 
-    updateDocument(updateExperience(cv, experience));
+    updateDocument(
+      updateExperience(cv, experience),
+    );
   }
 
   function removeExperience(id: string) {
@@ -261,7 +334,9 @@ export default function HomePage() {
     updateDocument(
       updateExperience(
         cv,
-        getExperience(cv).filter((item) => item.id !== id),
+        getExperience(cv).filter(
+          (item) => item.id !== id,
+        ),
       ),
     );
   }
@@ -273,16 +348,19 @@ export default function HomePage() {
   ) {
     if (!cv) return;
 
-    const education = getEducation(cv).map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            [field]: value,
-          }
-        : item,
+    const education = getEducation(cv).map(
+      (item) =>
+        item.id === id
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
     );
 
-    updateDocument(updateEducation(cv, education));
+    updateDocument(
+      updateEducation(cv, education),
+    );
   }
 
   function addEducation() {
@@ -300,7 +378,9 @@ export default function HomePage() {
       },
     ];
 
-    updateDocument(updateEducation(cv, education));
+    updateDocument(
+      updateEducation(cv, education),
+    );
   }
 
   function removeEducation(id: string) {
@@ -309,7 +389,9 @@ export default function HomePage() {
     updateDocument(
       updateEducation(
         cv,
-        getEducation(cv).filter((item) => item.id !== id),
+        getEducation(cv).filter(
+          (item) => item.id !== id,
+        ),
       ),
     );
   }
@@ -321,16 +403,19 @@ export default function HomePage() {
   ) {
     if (!cv) return;
 
-    const projects = getProjects(cv).map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            [field]: value,
-          }
-        : item,
+    const projects = getProjects(cv).map(
+      (item) =>
+        item.id === id
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
     );
 
-    updateDocument(updateProjects(cv, projects));
+    updateDocument(
+      updateProjects(cv, projects),
+    );
   }
 
   function addProject() {
@@ -346,7 +431,9 @@ export default function HomePage() {
       },
     ];
 
-    updateDocument(updateProjects(cv, projects));
+    updateDocument(
+      updateProjects(cv, projects),
+    );
   }
 
   function removeProject(id: string) {
@@ -355,7 +442,9 @@ export default function HomePage() {
     updateDocument(
       updateProjects(
         cv,
-        getProjects(cv).filter((item) => item.id !== id),
+        getProjects(cv).filter(
+          (item) => item.id !== id,
+        ),
       ),
     );
   }
@@ -367,16 +456,23 @@ export default function HomePage() {
   ) {
     if (!cv) return;
 
-    const certifications = getCertifications(cv).map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            [field]: value,
-          }
-        : item,
-    );
+    const certifications =
+      getCertifications(cv).map(
+        (item) =>
+          item.id === id
+            ? {
+                ...item,
+                [field]: value,
+              }
+            : item,
+      );
 
-    updateDocument(updateCertifications(cv, certifications));
+    updateDocument(
+      updateCertifications(
+        cv,
+        certifications,
+      ),
+    );
   }
 
   function addCertification() {
@@ -393,7 +489,12 @@ export default function HomePage() {
       },
     ];
 
-    updateDocument(updateCertifications(cv, certifications));
+    updateDocument(
+      updateCertifications(
+        cv,
+        certifications,
+      ),
+    );
   }
 
   function removeCertification(id: string) {
@@ -402,7 +503,9 @@ export default function HomePage() {
     updateDocument(
       updateCertifications(
         cv,
-        getCertifications(cv).filter((item) => item.id !== id),
+        getCertifications(cv).filter(
+          (item) => item.id !== id,
+        ),
       ),
     );
   }
@@ -414,9 +517,12 @@ export default function HomePage() {
 
     if (!confirmed) return;
 
-    const nextDocument = createDefaultDocument();
+    const nextDocument =
+      createDefaultDocument();
+
     removeDocument();
     setCv(nextDocument);
+    setSkillInput("");
   }
 
   function exportDocument() {
@@ -435,11 +541,15 @@ export default function HomePage() {
       type: "application/json",
     });
 
-    const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement("a");
+    const url =
+      URL.createObjectURL(blob);
+
+    const anchor =
+      window.document.createElement("a");
 
     anchor.href = url;
-    anchor.download = "cv-studio-document.json";
+    anchor.download =
+      "cv-studio-document.json";
     anchor.click();
 
     URL.revokeObjectURL(url);
@@ -449,7 +559,9 @@ export default function HomePage() {
     fileInputRef.current?.click();
   }
 
-  function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+  function handleImportFile(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0];
 
     if (!file) return;
@@ -460,46 +572,71 @@ export default function HomePage() {
 
     reader.onload = () => {
       try {
-        const parsed: unknown = JSON.parse(String(reader.result));
+        const parsed: unknown =
+          JSON.parse(
+            String(reader.result),
+          );
 
-        let imported: CVDocument | null = null;
+        let imported:
+          | CVDocument
+          | null = null;
 
         if (
           parsed &&
           typeof parsed === "object" &&
           "document" in parsed
         ) {
-          const wrapped = parsed as {
-            document?: unknown;
-          };
+          const wrapped =
+            parsed as {
+              document?: unknown;
+            };
 
-          if (isValidCVDocument(wrapped.document)) {
-            imported = wrapped.document;
+          if (
+            isValidCVDocument(
+              wrapped.document,
+            )
+          ) {
+            imported =
+              wrapped.document;
           }
-        } else if (isValidCVDocument(parsed)) {
+        } else if (
+          isValidCVDocument(parsed)
+        ) {
           imported = parsed;
         } else {
-          imported = createDocumentFromLegacyCV(parsed);
+          imported =
+            createDocumentFromLegacyCV(
+              parsed,
+            );
         }
 
         if (!imported) {
-          setImportError("That file does not contain a valid CV document.");
+          setImportError(
+            "That file does not contain a valid CV document.",
+          );
           return;
         }
 
         setCv({
           ...imported,
-          updatedAt: new Date().toISOString(),
+          updatedAt:
+            new Date().toISOString(),
         });
+
+        setSkillInput("");
       } catch {
-        setImportError("Could not read that file as JSON.");
+        setImportError(
+          "Could not read that file as JSON.",
+        );
       } finally {
         event.target.value = "";
       }
     };
 
     reader.onerror = () => {
-      setImportError("Could not read that file.");
+      setImportError(
+        "Could not read that file.",
+      );
       event.target.value = "";
     };
 
@@ -524,7 +661,8 @@ export default function HomePage() {
   const experience = getExperience(cv);
   const education = getEducation(cv);
   const projects = getProjects(cv);
-  const certifications = getCertifications(cv);
+  const certifications =
+    getCertifications(cv);
 
   return (
     <main className="min-h-screen bg-[#f5f5f3]">
@@ -534,6 +672,7 @@ export default function HomePage() {
             <h1 className="text-base font-semibold tracking-tight text-gray-900">
               CV Studio
             </h1>
+
             <p className="text-xs text-gray-500">
               Your document stays in this browser.
             </p>
@@ -544,7 +683,9 @@ export default function HomePage() {
               ref={fileInputRef}
               type="file"
               accept="application/json,.json"
-              onChange={handleImportFile}
+              onChange={
+                handleImportFile
+              }
               className="hidden"
             />
 
@@ -576,7 +717,7 @@ export default function HomePage() {
       </header>
 
       {importError ? (
-        <div className="cv-app-header border-b border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 print:hidden">
+        <div className="cv-import-error border-b border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 print:hidden">
           {importError}
         </div>
       ) : null}
@@ -588,21 +729,36 @@ export default function HomePage() {
               <EditorField
                 label="Name"
                 value={basics.name}
-                onChange={(value) => handleBasicsChange("name", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "name",
+                    value,
+                  )
+                }
                 placeholder="Your name"
               />
 
               <EditorField
                 label="Professional title"
                 value={basics.title}
-                onChange={(value) => handleBasicsChange("title", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "title",
+                    value,
+                  )
+                }
                 placeholder="Software Developer"
               />
 
               <EditorField
                 label="Email"
                 value={basics.email}
-                onChange={(value) => handleBasicsChange("email", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "email",
+                    value,
+                  )
+                }
                 placeholder="you@example.com"
                 type="email"
               />
@@ -610,28 +766,48 @@ export default function HomePage() {
               <EditorField
                 label="Phone"
                 value={basics.phone}
-                onChange={(value) => handleBasicsChange("phone", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "phone",
+                    value,
+                  )
+                }
                 placeholder="+234..."
               />
 
               <EditorField
                 label="Location"
                 value={basics.location}
-                onChange={(value) => handleBasicsChange("location", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "location",
+                    value,
+                  )
+                }
                 placeholder="Abeokuta, Nigeria"
               />
 
               <EditorField
                 label="Website"
                 value={basics.website}
-                onChange={(value) => handleBasicsChange("website", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "website",
+                    value,
+                  )
+                }
                 placeholder="https://example.com"
               />
 
               <EditorField
                 label="LinkedIn"
                 value={basics.linkedin}
-                onChange={(value) => handleBasicsChange("linkedin", value)}
+                onChange={(value) =>
+                  handleBasicsChange(
+                    "linkedin",
+                    value,
+                  )
+                }
                 placeholder="https://linkedin.com/in/..."
               />
             </EditorSection>
@@ -640,7 +816,9 @@ export default function HomePage() {
               <EditorTextarea
                 label="Summary"
                 value={summary}
-                onChange={handleSummaryChange}
+                onChange={
+                  handleSummaryChange
+                }
                 placeholder="A concise professional summary..."
                 rows={7}
               />
@@ -651,7 +829,9 @@ export default function HomePage() {
               action={
                 <button
                   type="button"
-                  onClick={addExperience}
+                  onClick={
+                    addExperience
+                  }
                   className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
                 >
                   Add
@@ -660,94 +840,136 @@ export default function HomePage() {
             >
               {experience.length === 0 ? (
                 <EmptyState>
-                  Add your professional experience.
+                  Add your professional
+                  experience.
                 </EmptyState>
               ) : (
-                experience.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="space-y-4 border border-gray-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
-                        Experience {index + 1}
-                      </p>
+                experience.map(
+                  (item, index) => (
+                    <div
+                      key={item.id}
+                      className="space-y-4 border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                          Experience{" "}
+                          {index + 1}
+                        </p>
 
-                      <ItemActions
-                        onRemove={() => removeExperience(item.id)}
-                      />
-                    </div>
-
-                    <EditorField
-                      label="Role"
-                      value={item.role}
-                      onChange={(value) =>
-                        handleExperienceChange(item.id, "role", value)
-                      }
-                      placeholder="Software Developer"
-                    />
-
-                    <EditorField
-                      label="Company"
-                      value={item.company}
-                      onChange={(value) =>
-                        handleExperienceChange(item.id, "company", value)
-                      }
-                      placeholder="Company name"
-                    />
-
-                    <EditorField
-                      label="Location"
-                      value={item.location}
-                      onChange={(value) =>
-                        handleExperienceChange(item.id, "location", value)
-                      }
-                      placeholder="Lagos, Nigeria"
-                    />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <EditorField
-                        label="Start"
-                        value={item.startDate}
-                        onChange={(value) =>
-                          handleExperienceChange(
-                            item.id,
-                            "startDate",
-                            value,
-                          )
-                        }
-                        placeholder="2024"
-                      />
+                        <ItemActions
+                          onRemove={() =>
+                            removeExperience(
+                              item.id,
+                            )
+                          }
+                        />
+                      </div>
 
                       <EditorField
-                        label="End"
-                        value={item.endDate}
-                        onChange={(value) =>
-                          handleExperienceChange(
-                            item.id,
-                            "endDate",
-                            value,
-                          )
-                        }
-                        placeholder="Present"
-                      />
-                    </div>
-
-                    <EditorTextarea
-                      label="Description"
-                      value={item.description}
-                      onChange={(value) =>
-                        handleExperienceChange(
-                          item.id,
-                          "description",
+                        label="Role"
+                        value={item.role}
+                        onChange={(
                           value,
-                        )
-                      }
-                      placeholder="Describe your responsibilities and results..."
-                      rows={6}
-                    />
-                  </div>
-                ))
+                        ) =>
+                          handleExperienceChange(
+                            item.id,
+                            "role",
+                            value,
+                          )
+                        }
+                        placeholder="Software Developer"
+                      />
+
+                      <EditorField
+                        label="Company"
+                        value={
+                          item.company
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleExperienceChange(
+                            item.id,
+                            "company",
+                            value,
+                          )
+                        }
+                        placeholder="Company name"
+                      />
+
+                      <EditorField
+                        label="Location"
+                        value={
+                          item.location
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleExperienceChange(
+                            item.id,
+                            "location",
+                            value,
+                          )
+                        }
+                        placeholder="Lagos, Nigeria"
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <EditorField
+                          label="Start"
+                          value={
+                            item.startDate
+                          }
+                          onChange={(
+                            value,
+                          ) =>
+                            handleExperienceChange(
+                              item.id,
+                              "startDate",
+                              value,
+                            )
+                          }
+                          placeholder="2024"
+                        />
+
+                        <EditorField
+                          label="End"
+                          value={
+                            item.endDate
+                          }
+                          onChange={(
+                            value,
+                          ) =>
+                            handleExperienceChange(
+                              item.id,
+                              "endDate",
+                              value,
+                            )
+                          }
+                          placeholder="Present"
+                        />
+                      </div>
+
+                      <EditorTextarea
+                        label="Description"
+                        value={
+                          item.description
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleExperienceChange(
+                            item.id,
+                            "description",
+                            value,
+                          )
+                        }
+                        placeholder="Describe your responsibilities and results..."
+                        rows={6}
+                      />
+                    </div>
+                  ),
+                )
               )}
             </EditorSection>
 
@@ -756,7 +978,9 @@ export default function HomePage() {
               action={
                 <button
                   type="button"
-                  onClick={addEducation}
+                  onClick={
+                    addEducation
+                  }
                   className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
                 >
                   Add
@@ -765,99 +989,185 @@ export default function HomePage() {
             >
               {education.length === 0 ? (
                 <EmptyState>
-                  Add your education history.
+                  Add your education
+                  history.
                 </EmptyState>
               ) : (
-                education.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="space-y-4 border border-gray-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
-                        Education {index + 1}
-                      </p>
+                education.map(
+                  (item, index) => (
+                    <div
+                      key={item.id}
+                      className="space-y-4 border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                          Education{" "}
+                          {index + 1}
+                        </p>
 
-                      <ItemActions
-                        onRemove={() => removeEducation(item.id)}
-                      />
-                    </div>
+                        <ItemActions
+                          onRemove={() =>
+                            removeEducation(
+                              item.id,
+                            )
+                          }
+                        />
+                      </div>
 
-                    <EditorField
-                      label="Degree / qualification"
-                      value={item.degree}
-                      onChange={(value) =>
-                        handleEducationChange(item.id, "degree", value)
-                      }
-                      placeholder="B.Sc. Computer Science"
-                    />
-
-                    <EditorField
-                      label="School"
-                      value={item.school}
-                      onChange={(value) =>
-                        handleEducationChange(item.id, "school", value)
-                      }
-                      placeholder="University name"
-                    />
-
-                    <EditorField
-                      label="Location"
-                      value={item.location}
-                      onChange={(value) =>
-                        handleEducationChange(
-                          item.id,
-                          "location",
+                      <EditorField
+                        label="Degree / qualification"
+                        value={
+                          item.degree
+                        }
+                        onChange={(
                           value,
-                        )
-                      }
-                      placeholder="Ogun, Nigeria"
-                    />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <EditorField
-                        label="Start"
-                        value={item.startDate}
-                        onChange={(value) =>
+                        ) =>
                           handleEducationChange(
                             item.id,
-                            "startDate",
+                            "degree",
                             value,
                           )
                         }
-                        placeholder="2020"
+                        placeholder="B.Sc. Computer Science"
                       />
 
                       <EditorField
-                        label="End"
-                        value={item.endDate}
-                        onChange={(value) =>
+                        label="School"
+                        value={
+                          item.school
+                        }
+                        onChange={(
+                          value,
+                        ) =>
                           handleEducationChange(
                             item.id,
-                            "endDate",
+                            "school",
                             value,
                           )
                         }
-                        placeholder="2024"
+                        placeholder="University name"
                       />
+
+                      <EditorField
+                        label="Location"
+                        value={
+                          item.location
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleEducationChange(
+                            item.id,
+                            "location",
+                            value,
+                          )
+                        }
+                        placeholder="Ogun, Nigeria"
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <EditorField
+                          label="Start"
+                          value={
+                            item.startDate
+                          }
+                          onChange={(
+                            value,
+                          ) =>
+                            handleEducationChange(
+                              item.id,
+                              "startDate",
+                              value,
+                            )
+                          }
+                          placeholder="2020"
+                        />
+
+                        <EditorField
+                          label="End"
+                          value={
+                            item.endDate
+                          }
+                          onChange={(
+                            value,
+                          ) =>
+                            handleEducationChange(
+                              item.id,
+                              "endDate",
+                              value,
+                            )
+                          }
+                          placeholder="2024"
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ),
+                )
               )}
             </EditorSection>
 
             <EditorSection title="Skills">
-              <EditorTextarea
-                label="Skills"
-                value={skills.join(", ")}
-                onChange={handleSkillsChange}
-                placeholder="TypeScript, React, Next.js, Git..."
-                rows={5}
-              />
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={skillInput}
+                    onChange={(event) =>
+                      setSkillInput(
+                        event.target.value,
+                      )
+                    }
+                    onKeyDown={
+                      handleSkillInputKeyDown
+                    }
+                    placeholder="Type a skill"
+                    className="min-w-0 flex-1 border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-700"
+                  />
 
-              <p className="text-xs leading-relaxed text-gray-500">
-                Separate skills with commas.
-              </p>
+                  <button
+                    type="button"
+                    onClick={addSkill}
+                    className="shrink-0 bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-700"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {skills.map(
+                      (skill) => (
+                        <span
+                          key={skill}
+                          className="inline-flex items-center gap-2 border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-700"
+                        >
+                          <span className="break-words">
+                            {skill}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removeSkill(
+                                skill,
+                              )
+                            }
+                            aria-label={`Remove ${skill}`}
+                            className="text-gray-400 transition hover:text-red-600"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs leading-relaxed text-gray-500">
+                    Add individual skills
+                    using the field above.
+                  </p>
+                )}
+              </div>
             </EditorSection>
 
             <EditorSection
@@ -874,57 +1184,81 @@ export default function HomePage() {
             >
               {projects.length === 0 ? (
                 <EmptyState>
-                  Add projects that demonstrate your work.
+                  Add projects that
+                  demonstrate your work.
                 </EmptyState>
               ) : (
-                projects.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="space-y-4 border border-gray-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
-                        Project {index + 1}
-                      </p>
+                projects.map(
+                  (item, index) => (
+                    <div
+                      key={item.id}
+                      className="space-y-4 border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                          Project{" "}
+                          {index + 1}
+                        </p>
 
-                      <ItemActions
-                        onRemove={() => removeProject(item.id)}
+                        <ItemActions
+                          onRemove={() =>
+                            removeProject(
+                              item.id,
+                            )
+                          }
+                        />
+                      </div>
+
+                      <EditorField
+                        label="Name"
+                        value={item.name}
+                        onChange={(
+                          value,
+                        ) =>
+                          handleProjectChange(
+                            item.id,
+                            "name",
+                            value,
+                          )
+                        }
+                        placeholder="Project name"
+                      />
+
+                      <EditorTextarea
+                        label="Description"
+                        value={
+                          item.description
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleProjectChange(
+                            item.id,
+                            "description",
+                            value,
+                          )
+                        }
+                        placeholder="What did you build?"
+                        rows={5}
+                      />
+
+                      <EditorField
+                        label="Link"
+                        value={item.link}
+                        onChange={(
+                          value,
+                        ) =>
+                          handleProjectChange(
+                            item.id,
+                            "link",
+                            value,
+                          )
+                        }
+                        placeholder="https://github.com/..."
                       />
                     </div>
-
-                    <EditorField
-                      label="Name"
-                      value={item.name}
-                      onChange={(value) =>
-                        handleProjectChange(item.id, "name", value)
-                      }
-                      placeholder="Project name"
-                    />
-
-                    <EditorTextarea
-                      label="Description"
-                      value={item.description}
-                      onChange={(value) =>
-                        handleProjectChange(
-                          item.id,
-                          "description",
-                          value,
-                        )
-                      }
-                      placeholder="What did you build?"
-                      rows={5}
-                    />
-
-                    <EditorField
-                      label="Link"
-                      value={item.link}
-                      onChange={(value) =>
-                        handleProjectChange(item.id, "link", value)
-                      }
-                      placeholder="https://github.com/..."
-                    />
-                  </div>
-                ))
+                  ),
+                )
               )}
             </EditorSection>
 
@@ -933,7 +1267,9 @@ export default function HomePage() {
               action={
                 <button
                   type="button"
-                  onClick={addCertification}
+                  onClick={
+                    addCertification
+                  }
                   className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
                 >
                   Add
@@ -942,79 +1278,95 @@ export default function HomePage() {
             >
               {certifications.length === 0 ? (
                 <EmptyState>
-                  Add certifications, courses, or credentials.
+                  Add certifications,
+                  courses, or credentials.
                 </EmptyState>
               ) : (
-                certifications.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className="space-y-4 border border-gray-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
-                        Certification {index + 1}
-                      </p>
+                certifications.map(
+                  (item, index) => (
+                    <div
+                      key={item.id}
+                      className="space-y-4 border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                          Certification{" "}
+                          {index + 1}
+                        </p>
 
-                      <ItemActions
-                        onRemove={() =>
-                          removeCertification(item.id)
+                        <ItemActions
+                          onRemove={() =>
+                            removeCertification(
+                              item.id,
+                            )
+                          }
+                        />
+                      </div>
+
+                      <EditorField
+                        label="Name"
+                        value={item.name}
+                        onChange={(
+                          value,
+                        ) =>
+                          handleCertificationChange(
+                            item.id,
+                            "name",
+                            value,
+                          )
                         }
+                        placeholder="Certification name"
+                      />
+
+                      <EditorField
+                        label="Issuer"
+                        value={
+                          item.issuer
+                        }
+                        onChange={(
+                          value,
+                        ) =>
+                          handleCertificationChange(
+                            item.id,
+                            "issuer",
+                            value,
+                          )
+                        }
+                        placeholder="Issuing organization"
+                      />
+
+                      <EditorField
+                        label="Date"
+                        value={item.date}
+                        onChange={(
+                          value,
+                        ) =>
+                          handleCertificationChange(
+                            item.id,
+                            "date",
+                            value,
+                          )
+                        }
+                        placeholder="2026"
+                      />
+
+                      <EditorField
+                        label="Link"
+                        value={item.link}
+                        onChange={(
+                          value,
+                        ) =>
+                          handleCertificationChange(
+                            item.id,
+                            "link",
+                            value,
+                          )
+                        }
+                        placeholder="https://..."
                       />
                     </div>
-
-                    <EditorField
-                      label="Name"
-                      value={item.name}
-                      onChange={(value) =>
-                        handleCertificationChange(
-                          item.id,
-                          "name",
-                          value,
-                        )
-                      }
-                      placeholder="Certification name"
-                    />
-
-                    <EditorField
-                      label="Issuer"
-                      value={item.issuer}
-                      onChange={(value) =>
-                        handleCertificationChange(
-                          item.id,
-                          "issuer",
-                          value,
-                        )
-                      }
-                      placeholder="Issuing organization"
-                    />
-
-                    <EditorField
-                      label="Date"
-                      value={item.date}
-                      onChange={(value) =>
-                        handleCertificationChange(
-                          item.id,
-                          "date",
-                          value,
-                        )
-                      }
-                      placeholder="2026"
-                    />
-
-                    <EditorField
-                      label="Link"
-                      value={item.link}
-                      onChange={(value) =>
-                        handleCertificationChange(
-                          item.id,
-                          "link",
-                          value,
-                        )
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-                ))
+                  ),
+                )
               )}
             </EditorSection>
 
@@ -1029,15 +1381,18 @@ export default function HomePage() {
             </EditorSection>
 
             <div className="px-5 py-6 text-xs leading-relaxed text-gray-400">
-              Changes are saved automatically in this browser. Use Export
-              to keep a portable backup.
+              Changes are saved automatically
+              in this browser. Use Export to
+              keep a portable backup.
             </div>
           </div>
         </aside>
 
         <section className="cv-print-root min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10 print:bg-white print:p-0">
-          <div className="mx-auto w-fit">
-            <ProfessionalTemplate document={cv} />
+          <div className="cv-print-page mx-auto w-fit">
+            <ProfessionalTemplate
+              document={cv}
+            />
           </div>
         </section>
       </div>
