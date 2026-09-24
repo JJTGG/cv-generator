@@ -16,6 +16,7 @@ body {
 }
 
 .cv-paper {
+  box-sizing: border-box;
   width: 210mm;
   min-height: 297mm;
   padding: 18mm 18mm 20mm;
@@ -48,8 +49,8 @@ body {
 
   html,
   body {
-    width: 210mm;
-    min-height: 297mm;
+    width: auto;
+    min-height: 0;
     margin: 0;
     padding: 0;
     background: #ffffff;
@@ -65,24 +66,31 @@ body {
     display: none !important;
   }
 
-  main,
-  main > div,
-  main > div > section {
+  .cv-print-root {
     display: block !important;
     width: auto !important;
     min-width: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: #ffffff !important;
     overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .cv-print-root > div {
+    display: block !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .cv-paper {
-    width: 210mm;
+    box-sizing: border-box;
+    width: 210mm !important;
     min-height: 297mm;
-    margin: 0;
+    margin: 0 !important;
     padding: 18mm 18mm 20mm;
-    box-shadow: none;
+    background: #ffffff !important;
+    box-shadow: none !important;
   }
 
   .cv-section-keep-together,
