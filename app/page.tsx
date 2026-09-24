@@ -4,7 +4,7 @@ import type { ChangeEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { CVEditor } from "@/components/editor/CVEditor";
-import { ProfessionalTemplate } from "@/components/preview/templates/ProfessionalTemplate";
+import { CVPreview } from "@/components/preview/CVPreview";
 import { createDefaultDocument } from "@/lib/document/defaults";
 import {
   createDocumentFromLegacyCV,
@@ -251,11 +251,7 @@ export default function HomePage() {
           onReset={resetDocument}
         />
 
-        <section className="cv-print-root min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10 print:bg-white print:p-0">
-          <div className="cv-print-page mx-auto w-fit">
-            <ProfessionalTemplate document={cv} />
-          </div>
-        </section>
+        <CVPreview document={cv} />
       </div>
     </main>
   );
