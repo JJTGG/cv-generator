@@ -13,18 +13,18 @@ export function getSection(
   document: CVDocument,
   type: CVSectionType,
 ): CVSection | undefined {
-  return document.sections.find((section) => section.type === type);
+  return document.sections.find(
+    (section) => section.type === type,
+  );
 }
 
-export function getBasics(document: CVDocument): CVBasics {
+export function getBasics(
+  document: CVDocument,
+): CVBasics {
   const section = getSection(document, "basics");
 
-  if (
-    section &&
-    typeof section.data === "object" &&
-    !Array.isArray(section.data)
-  ) {
-    return section.data as CVBasics;
+  if (section?.type === "basics") {
+    return section.data;
   }
 
   return {
@@ -39,49 +39,62 @@ export function getBasics(document: CVDocument): CVBasics {
   };
 }
 
-export function getSummary(document: CVDocument): string {
+export function getSummary(
+  document: CVDocument,
+): string {
   const section = getSection(document, "summary");
 
-  return typeof section?.data === "string"
+  return section?.type === "summary"
     ? section.data
     : "";
 }
 
-export function getSkills(document: CVDocument): string[] {
+export function getSkills(
+  document: CVDocument,
+): string[] {
   const section = getSection(document, "skills");
 
-  return Array.isArray(section?.data)
-    ? (section.data as string[])
+  return section?.type === "skills"
+    ? section.data
     : [];
 }
 
 export function getExperience(
   document: CVDocument,
 ): Experience[] {
-  const section = getSection(document, "experience");
+  const section = getSection(
+    document,
+    "experience",
+  );
 
-  return Array.isArray(section?.data)
-    ? (section.data as Experience[])
+  return section?.type === "experience"
+    ? section.data
     : [];
 }
 
 export function getEducation(
   document: CVDocument,
 ): Education[] {
-  const section = getSection(document, "education");
+  const section = getSection(
+    document,
+    "education",
+  );
 
-  return Array.isArray(section?.data)
-    ? (section.data as Education[])
+  return section?.type === "education"
+    ? section.data
     : [];
 }
 
 export function getProjects(
   document: CVDocument,
 ): Project[] {
-  const section = getSection(document, "projects");
+  const section = getSection(
+    document,
+    "projects",
+  );
 
-  return Array.isArray(section?.data)
-    ? (section.data as Project[])
+  return section?.type === "projects"
+    ? section.data
     : [];
 }
 
@@ -93,25 +106,41 @@ export function getCertifications(
     "certifications",
   );
 
-  return Array.isArray(section?.data)
-    ? (section.data as Certification[])
+  return section?.type === "certifications"
+    ? section.data
     : [];
 }
 
 function updateSection(
   document: CVDocument,
-  type: CVSectionType,
-  data: CVSection["data"],
+  updatedSection: CVSection,
 ): CVDocument {
   return {
     ...document,
     updatedAt: new Date().toISOString(),
     sections: document.sections.map((section) =>
-      section.type === type
-        ? { ...section, data }
+      section.id === updatedSection.id
+        ? updatedSection
         : section,
     ),
   };
+}
+
+function updateSectionByType(
+  document: CVDocument,
+  type: CVSectionType,
+  update: (section: CVSection) => CVSection,
+): CVDocument {
+  const section = getSection(document, type);
+
+  if (!section) {
+    return document;
+  }
+
+  return updateSection(
+    document,
+    update(section),
+  );
 }
 
 export function updateBasics(
@@ -119,14 +148,21 @@ export function updateBasics(
   field: keyof CVBasics,
   value: string,
 ): CVDocument {
-  const basics = getBasics(document);
-
-  return updateSection(
+  return updateSectionByType(
     document,
     "basics",
-    {
-      ...basics,
-      [field]: value,
+    (section) => {
+      if (section.type !== "basics") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: {
+          ...section.data,
+          [field]: value,
+        },
+      };
     },
   );
 }
@@ -135,10 +171,19 @@ export function updateSummary(
   document: CVDocument,
   value: string,
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "summary",
-    value,
+    (section) => {
+      if (section.type !== "summary") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: value,
+      };
+    },
   );
 }
 
@@ -146,10 +191,19 @@ export function updateSkills(
   document: CVDocument,
   skills: string[],
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "skills",
-    skills,
+    (section) => {
+      if (section.type !== "skills") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: skills,
+      };
+    },
   );
 }
 
@@ -157,10 +211,19 @@ export function updateExperience(
   document: CVDocument,
   items: Experience[],
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "experience",
-    items,
+    (section) => {
+      if (section.type !== "experience") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: items,
+      };
+    },
   );
 }
 
@@ -168,10 +231,19 @@ export function updateEducation(
   document: CVDocument,
   items: Education[],
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "education",
-    items,
+    (section) => {
+      if (section.type !== "education") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: items,
+      };
+    },
   );
 }
 
@@ -179,10 +251,19 @@ export function updateProjects(
   document: CVDocument,
   items: Project[],
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "projects",
-    items,
+    (section) => {
+      if (section.type !== "projects") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: items,
+      };
+    },
   );
 }
 
@@ -190,10 +271,19 @@ export function updateCertifications(
   document: CVDocument,
   items: Certification[],
 ): CVDocument {
-  return updateSection(
+  return updateSectionByType(
     document,
     "certifications",
-    items,
+    (section) => {
+      if (section.type !== "certifications") {
+        return section;
+      }
+
+      return {
+        ...section,
+        data: items,
+      };
+    },
   );
 }
 
