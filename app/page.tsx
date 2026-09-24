@@ -9,13 +9,14 @@ import {
 } from "react";
 import type {
   Certification,
-  CVDocument,
   CVBasics,
+  CVDocument,
   Education,
   Experience,
   Project,
 } from "@/lib/document/types";
 import { createDefaultDocument } from "@/lib/document/defaults";
+import { ProfessionalTemplate } from "@/components/preview/templates/ProfessionalTemplate";
 import {
   createDocumentFromLegacyCV,
   getBasics,
@@ -23,7 +24,6 @@ import {
   getEducation,
   getExperience,
   getProjects,
-  getSection,
   getSkills,
   getSummary,
   updateBasics,
@@ -53,10 +53,6 @@ function createId(prefix: string) {
     .slice(2, 8)}`;
 }
 
-function cloneDocument(document: CVDocument): CVDocument {
-  return JSON.parse(JSON.stringify(document));
-}
-
 function getLegacyStoredValue(): unknown | null {
   if (typeof window === "undefined") return null;
 
@@ -69,19 +65,6 @@ function getLegacyStoredValue(): unknown | null {
   } catch {
     return null;
   }
-}
-
-function getSectionOrThrow(
-  document: CVDocument,
-  type: Parameters<typeof getSection>[1],
-) {
-  const section = getSection(document, type);
-
-  if (!section) {
-    throw new Error(`Missing required section: ${type}`);
-  }
-
-  return section;
 }
 
 export default function Home() {
@@ -519,7 +502,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f5f5f3] text-[#171717]">
-      <header className="sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur print:hidden">
+      <header className="cv-app-header sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur print:hidden">
         <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-4 px-5 lg:px-8">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#73736e]">
@@ -575,7 +558,7 @@ export default function Home() {
       </header>
 
       <div className="mx-auto grid max-w-[1500px] lg:grid-cols-[430px_minmax(0,1fr)]">
-        <aside className="border-r border-[#deded9] bg-[#f5f5f3] print:hidden lg:min-h-[calc(100vh-4rem)]">
+        <aside className="cv-editor-sidebar border-r border-[#deded9] bg-[#f5f5f3] print:hidden lg:min-h-[calc(100vh-4rem)]">
           <div className="p-5 lg:p-7">
             <div className="mb-7">
               <p className="text-sm text-[#73736e]">
@@ -799,223 +782,13 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10 print:bg-white print:p-0">
+        <section className="cv-print-root min-w-0 overflow-x-auto bg-[#deded9] p-5 lg:p-10 print:bg-white print:p-0">
           <div className="mx-auto w-fit">
-            <CVPreview cv={cv} />
+            <ProfessionalTemplate document={cv} />
           </div>
         </section>
       </div>
     </main>
-  );
-}
-
-function CVPreview({ cv }: { cv: CVDocument }) {
-  const basics = getBasics(cv);
-  const summary = getSummary(cv);
-  const skills = getSkills(cv);
-  const experience = getExperience(cv);
-  const education = getEducation(cv);
-  const projects = getProjects(cv);
-  const certifications = getCertifications(cv);
-
-  const hasContact =
-    basics.email ||
-    basics.phone ||
-    basics.location ||
-    basics.website ||
-    basics.linkedin;
-
-  return (
-    <article className="cv-paper">
-      <header className="cv-section-keep-together border-b-[1.5px] border-[#222] pb-5">
-        <h2 className="text-[30px] font-semibold tracking-[-0.035em] text-[#111]">
-          {basics.name || "Your Name"}
-        </h2>
-
-        <p className="mt-1 text-[15px] font-medium text-[#555]">
-          {basics.title || "Professional Title"}
-        </p>
-
-        {hasContact && (
-          <div className="mt-4 flex max-w-[650px] flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-[#555]">
-            {basics.email && (
-              <span>{basics.email}</span>
-            )}
-            {basics.phone && (
-              <span>{basics.phone}</span>
-            )}
-            {basics.location && (
-              <span>{basics.location}</span>
-            )}
-            {basics.website && (
-              <span>{basics.website}</span>
-            )}
-            {basics.linkedin && (
-              <span>{basics.linkedin}</span>
-            )}
-          </div>
-        )}
-      </header>
-
-      {summary && (
-        <CVSection title="Profile">
-          <p>{summary}</p>
-        </CVSection>
-      )}
-
-      {experience.length > 0 && (
-        <CVSection title="Experience">
-          <div className="space-y-4">
-            {experience.map((item) => (
-              <div
-                key={item.id}
-                className="cv-entry-keep-together"
-              >
-                <div className="flex justify-between gap-6">
-                  <div>
-                    <p className="font-semibold text-[#111]">
-                      {item.role || "Role"}
-                    </p>
-
-                    <p className="mt-0.5">
-                      {item.company || "Company"}
-                      {item.location
-                        ? ` · ${item.location}`
-                        : ""}
-                    </p>
-                  </div>
-
-                  {(item.startDate ||
-                    item.endDate) && (
-                    <p className="whitespace-nowrap text-[10px] text-[#666]">
-                      {item.startDate}
-                      {item.startDate ||
-                      item.endDate
-                        ? " — "
-                        : ""}
-                      {item.endDate}
-                    </p>
-                  )}
-                </div>
-
-                {item.description && (
-                  <p className="mt-2 whitespace-pre-line">
-                    {item.description}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </CVSection>
-      )}
-
-      {projects.length > 0 && (
-        <CVSection title="Projects">
-          <div className="space-y-4">
-            {projects.map((item) => (
-              <div
-                key={item.id}
-                className="cv-entry-keep-together"
-              >
-                <p className="font-semibold text-[#111]">
-                  {item.name || "Project"}
-                </p>
-
-                {item.description && (
-                  <p className="mt-1 whitespace-pre-line">
-                    {item.description}
-                  </p>
-                )}
-
-                {item.link && (
-                  <p className="mt-1 break-words text-[10px] text-[#666]">
-                    {item.link}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </CVSection>
-      )}
-
-      {education.length > 0 && (
-        <CVSection title="Education">
-          <div className="space-y-4">
-            {education.map((item) => (
-              <div
-                key={item.id}
-                className="cv-entry-keep-together"
-              >
-                <div className="flex justify-between gap-6">
-                  <div>
-                    <p className="font-semibold text-[#111]">
-                      {item.degree ||
-                        "Degree or qualification"}
-                    </p>
-
-                    <p className="mt-0.5">
-                      {item.school ||
-                        "Institution"}
-                      {item.location
-                        ? ` · ${item.location}`
-                        : ""}
-                    </p>
-                  </div>
-
-                  {(item.startDate ||
-                    item.endDate) && (
-                    <p className="whitespace-nowrap text-[10px] text-[#666]">
-                      {item.startDate}
-                      {item.startDate ||
-                      item.endDate
-                        ? " — "
-                        : ""}
-                      {item.endDate}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CVSection>
-      )}
-
-      {certifications.length > 0 && (
-        <CVSection title="Certifications">
-          <div className="space-y-3">
-            {certifications.map((item) => (
-              <div
-                key={item.id}
-                className="cv-entry-keep-together"
-              >
-                <p className="font-semibold text-[#111]">
-                  {item.name || "Certification"}
-                </p>
-
-                <p>
-                  {item.issuer}
-                  {item.date
-                    ? ` · ${item.date}`
-                    : ""}
-                </p>
-
-                {item.link && (
-                  <p className="mt-1 break-words text-[10px] text-[#666]">
-                    {item.link}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </CVSection>
-      )}
-
-      {skills.length > 0 && (
-        <CVSection title="Skills">
-          <p>{skills.join(" · ")}</p>
-        </CVSection>
-      )}
-    </article>
   );
 }
 
@@ -1466,26 +1239,6 @@ function CertificationEditor({
         </div>
       ))}
     </EditorGroup>
-  );
-}
-
-function CVSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="cv-section-keep-together mt-7">
-      <h3 className="mb-3 border-b border-[#d7d7d2] pb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#222]">
-        {title}
-      </h3>
-
-      <div className="text-[11px] leading-[1.6] text-[#444]">
-        {children}
-      </div>
-    </section>
   );
 }
 
