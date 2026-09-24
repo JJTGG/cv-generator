@@ -1,8 +1,12 @@
 import type {
+  Certification,
   CVBasics,
   CVDocument,
   CVSection,
   CVSectionType,
+  Education,
+  Experience,
+  Project,
 } from "./types";
 
 const SECTION_TYPES: CVSectionType[] = [
@@ -24,6 +28,13 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => isString(item))
+  );
+}
+
 function isBasics(value: unknown): value is CVBasics {
   if (!isRecord(value)) return false;
 
@@ -39,6 +50,67 @@ function isBasics(value: unknown): value is CVBasics {
   );
 }
 
+function isExperience(value: unknown): value is Experience {
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    isString(value.role) &&
+    isString(value.company) &&
+    isString(value.location) &&
+    isString(value.startDate) &&
+    isString(value.endDate) &&
+    isString(value.description)
+  );
+}
+
+function isEducation(value: unknown): value is Education {
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    isString(value.degree) &&
+    isString(value.school) &&
+    isString(value.location) &&
+    isString(value.startDate) &&
+    isString(value.endDate)
+  );
+}
+
+function isProject(value: unknown): value is Project {
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.description) &&
+    isString(value.link)
+  );
+}
+
+function isCertification(
+  value: unknown,
+): value is Certification {
+  if (!isRecord(value)) return false;
+
+  return (
+    isString(value.id) &&
+    isString(value.name) &&
+    isString(value.issuer) &&
+    isString(value.date) &&
+    isString(value.link)
+  );
+}
+
+function isCustomSectionData(
+  value: unknown,
+): value is { content: string } {
+  return (
+    isRecord(value) &&
+    isString(value.content)
+  );
+}
+
 function isSectionType(value: unknown): value is CVSectionType {
   return (
     isString(value) &&
@@ -46,17 +118,68 @@ function isSectionType(value: unknown): value is CVSectionType {
   );
 }
 
+function isValidSectionData(
+  type: CVSectionType,
+  data: unknown,
+): boolean {
+  switch (type) {
+    case "basics":
+      return isBasics(data);
+
+    case "summary":
+      return isString(data);
+
+    case "experience":
+      return (
+        Array.isArray(data) &&
+        data.every(isExperience)
+      );
+
+    case "education":
+      return (
+        Array.isArray(data) &&
+        data.every(isEducation)
+      );
+
+    case "skills":
+      return isStringArray(data);
+
+    case "projects":
+      return (
+        Array.isArray(data) &&
+        data.every(isProject)
+      );
+
+    case "certifications":
+      return (
+        Array.isArray(data) &&
+        data.every(isCertification)
+      );
+
+    case "custom":
+      return isCustomSectionData(data);
+
+    default:
+      return false;
+  }
+}
+
 function isSection(value: unknown): value is CVSection {
   if (!isRecord(value)) return false;
 
-  return (
-    isString(value.id) &&
-    isSectionType(value.type) &&
-    isString(value.title) &&
-    typeof value.visible === "boolean" &&
-    typeof value.order === "number" &&
-    "data" in value
-  );
+  if (
+    !isString(value.id) ||
+    value.id.trim() === "" ||
+    !isSectionType(value.type) ||
+    !isString(value.title) ||
+    typeof value.visible !== "boolean" ||
+    typeof value.order !== "number" ||
+    !Number.isFinite(value.order)
+  ) {
+    return false;
+  }
+
+  return isValidSectionData(value.type, value.data);
 }
 
 export function isValidCVDocument(
@@ -66,8 +189,12 @@ export function isValidCVDocument(
 
   if (
     !isString(value.id) ||
+    value.id.trim() === "" ||
     !isString(value.name) ||
+    value.name.trim() === "" ||
     typeof value.version !== "number" ||
+    !Number.isInteger(value.version) ||
+    value.version < 1 ||
     !isString(value.createdAt) ||
     !isString(value.updatedAt)
   ) {
@@ -76,7 +203,10 @@ export function isValidCVDocument(
 
   if (!isRecord(value.settings)) return false;
 
-  if (!isString(value.settings.templateId)) {
+  if (
+    !isString(value.settings.templateId) ||
+    value.settings.templateId.trim() === ""
+  ) {
     return false;
   }
 
@@ -84,7 +214,19 @@ export function isValidCVDocument(
     return false;
   }
 
-  return value.sections.every(isSection);
+  if (!value.sections.every(isSection)) {
+    return false;
+  }
+
+  const sectionIds = value.sections.map(
+    (section) => section.id,
+  );
+
+  if (new Set(sectionIds).size !== sectionIds.length) {
+    return false;
+  }
+
+  return true;
 }
 
 export function validateCVDocument(value: unknown): string[] {
@@ -129,13 +271,71 @@ export function validateCVDocument(value: unknown): string[] {
 
   if (!Array.isArray(value.sections)) {
     errors.push("Document sections must be an array.");
-  } else {
-    value.sections.forEach((section, index) => {
-      if (!isSection(section)) {
-        errors.push(`Section ${index + 1} is invalid.`);
-      }
-    });
+    return errors;
   }
+
+  const sectionIds = new Set<string>();
+
+  value.sections.forEach((section, index) => {
+    const position = index + 1;
+
+    if (!isRecord(section)) {
+      errors.push(`Section ${position} is invalid.`);
+      return;
+    }
+
+    if (
+      !isString(section.id) ||
+      section.id.trim() === ""
+    ) {
+      errors.push(`Section ${position} has no ID.`);
+    } else if (sectionIds.has(section.id)) {
+      errors.push(
+        `Section ${position} has a duplicate ID.`,
+      );
+    } else {
+      sectionIds.add(section.id);
+    }
+
+    if (!isSectionType(section.type)) {
+      errors.push(
+        `Section ${position} has an invalid type.`,
+      );
+    }
+
+    if (!isString(section.title)) {
+      errors.push(
+        `Section ${position} title is invalid.`,
+      );
+    }
+
+    if (typeof section.visible !== "boolean") {
+      errors.push(
+        `Section ${position} visibility is invalid.`,
+      );
+    }
+
+    if (
+      typeof section.order !== "number" ||
+      !Number.isFinite(section.order)
+    ) {
+      errors.push(
+        `Section ${position} order is invalid.`,
+      );
+    }
+
+    if (
+      isSectionType(section.type) &&
+      !isValidSectionData(
+        section.type,
+        section.data,
+      )
+    ) {
+      errors.push(
+        `Section ${position} data is invalid for type "${section.type}".`,
+      );
+    }
+  });
 
   return errors;
 }
@@ -148,6 +348,8 @@ export function getBasicsSection(
   );
 }
 
-export function isValidBasics(value: unknown): value is CVBasics {
+export function isValidBasics(
+  value: unknown,
+): value is CVBasics {
   return isBasics(value);
 }
