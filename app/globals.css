@@ -61,10 +61,10 @@ body {
     print-color-adjust: exact;
   }
 
-  header,
-  aside {
-    display: none !important;
-  }
+  .cv-app-header,
+.cv-editor-sidebar {
+  display: none !important;
+}
 
   .cv-print-root {
     display: block !important;
