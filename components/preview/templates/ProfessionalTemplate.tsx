@@ -1,20 +1,21 @@
 import type {
+  Certification,
   CVDocument,
   CVSection,
-  Experience,
   Education,
+  Experience,
   Project,
-  Certification,
 } from "@/lib/document/types";
 import {
   getBasics,
-  getSummary,
-  getSkills,
-  getExperience,
-  getEducation,
-  getProjects,
   getCertifications,
+  getEducation,
+  getExperience,
+  getProjects,
+  getSkills,
+  getSummary,
 } from "@/lib/document/operations";
+import type { ReactNode } from "react";
 
 type ProfessionalTemplateProps = {
   document: CVDocument;
@@ -254,7 +255,7 @@ function Section({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="cv-section-keep-together mt-7">
@@ -280,14 +281,18 @@ export function ProfessionalTemplate({
 
   const visibleSections = [...document.sections]
     .filter((section) => section.visible)
-    .filter((section) => hasSectionContent(document, section))
+    .filter((section) =>
+      hasSectionContent(document, section),
+    )
     .sort((a, b) => a.order - b.order);
 
   return (
-    <article className="cv-paper mx-auto w-full max-w-[794px] bg-white px-12 py-12 text-[13px] leading-relaxed text-gray-800 shadow-sm print:mx-0 print:max-w-none print:shadow-none">
+    <article className="cv-paper cv-document mx-auto bg-white text-[13px] leading-relaxed text-gray-800 shadow-sm print:mx-0 print:shadow-none">
       <header className="border-b-2 border-gray-900 pb-5">
         <h1 className="break-words text-3xl font-bold tracking-tight text-gray-950">
-          {hasText(basics.name) ? basics.name : "Your Name"}
+          {hasText(basics.name)
+            ? basics.name
+            : "Your Name"}
         </h1>
 
         {hasText(basics.title) && (
@@ -425,7 +430,9 @@ export function ProfessionalTemplate({
             return (
               <Section
                 key={section.id}
-                title={section.title || "Certifications"}
+                title={
+                  section.title || "Certifications"
+                }
               >
                 <div className="space-y-5">
                   {certifications.map((item) => (
@@ -446,7 +453,10 @@ export function ProfessionalTemplate({
             return (
               <Section
                 key={section.id}
-                title={section.title || "Additional information"}
+                title={
+                  section.title ||
+                  "Additional information"
+                }
               >
                 <p className="whitespace-pre-line break-words text-sm leading-6 text-gray-700">
                   {section.data.content}
