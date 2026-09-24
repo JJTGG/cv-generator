@@ -1,146 +1,143 @@
 "use client";
 
-import { ChangeEvent, useEffect, useRef, useState } from "react";
-
-type Experience = {
-  id: string;
-  role: string;
-  company: string;
-  location: string;
-  startDate: string;
-  endDate: string;
-  description: string;
-};
-
-type Education = {
-  id: string;
-  degree: string;
-  school: string;
-  location: string;
-  startDate: string;
-  endDate: string;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  description: string;
-  link: string;
-};
-
-type Certification = {
-  id: string;
-  name: string;
-  issuer: string;
-  date: string;
-  link: string;
-};
-
-type CVData = {
-  basics: {
-    name: string;
-    title: string;
-    email: string;
-    phone: string;
-    location: string;
-    website: string;
-    linkedin: string;
-    photo: string;
-  };
-  summary: string;
-  skills: string[];
-  experience: Experience[];
-  education: Education[];
-  projects: Project[];
-  certifications: Certification[];
-};
-
-type StoredCV = {
-  version: 1;
-  data: CVData;
-};
+import {
+  ChangeEvent,
+  ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type {
+  Certification,
+  CVDocument,
+  CVBasics,
+  Education,
+  Experience,
+  Project,
+} from "@/lib/document/types";
+import { createDefaultDocument } from "@/lib/document/defaults";
+import {
+  createDocumentFromLegacyCV,
+  getBasics,
+  getCertifications,
+  getEducation,
+  getExperience,
+  getProjects,
+  getSection,
+  getSkills,
+  getSummary,
+  updateBasics,
+  updateCertifications,
+  updateEducation,
+  updateExperience,
+  updateProjects,
+  updateSectionData,
+  updateSkills,
+} from "@/lib/document/operations";
+import {
+  isValidCVDocument,
+  validateCVDocument,
+} from "@/lib/document/validation";
+import {
+  loadDocument,
+  saveDocument,
+} from "@/lib/persistence/localStorage";
 
 const STORAGE_KEY = "cv-studio-document";
 
-const initialCV: CVData = {
-  basics: {
-    name: "",
-    title: "",
-    email: "",
-    phone: "",
-    location: "",
-    website: "",
-    linkedin: "",
-    photo: "",
-  },
-  summary: "",
-  skills: [],
-  experience: [],
-  education: [],
-  projects: [],
-  certifications: [],
-};
+type SaveState = "loading" | "saved" | "saving" | "error";
 
-function createId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function createId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
-function cloneInitialCV(): CVData {
-  return JSON.parse(JSON.stringify(initialCV));
+function cloneDocument(document: CVDocument): CVDocument {
+  return JSON.parse(JSON.stringify(document));
 }
 
-function isValidCVData(value: unknown): value is CVData {
-  if (!value || typeof value !== "object") return false;
+function getLegacyStoredValue(): unknown | null {
+  if (typeof window === "undefined") return null;
 
-  const candidate = value as Partial<CVData>;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
 
-  return (
-    typeof candidate.basics === "object" &&
-    candidate.basics !== null &&
-    typeof candidate.summary === "string" &&
-    Array.isArray(candidate.skills) &&
-    Array.isArray(candidate.experience) &&
-    Array.isArray(candidate.education) &&
-    Array.isArray(candidate.projects) &&
-    Array.isArray(candidate.certifications)
-  );
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getSectionOrThrow(
+  document: CVDocument,
+  type: Parameters<typeof getSection>[1],
+) {
+  const section = getSection(document, type);
+
+  if (!section) {
+    throw new Error(`Missing required section: ${type}`);
+  }
+
+  return section;
 }
 
 export default function Home() {
-  const [cv, setCv] = useState<CVData>(initialCV);
+  const [cv, setCv] = useState<CVDocument>(() =>
+    createDefaultDocument(),
+  );
   const [activeSection, setActiveSection] = useState("personal");
   const [skillInput, setSkillInput] = useState("");
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [saveState, setSaveState] = useState<
-    "loading" | "saved" | "saving"
-  >("loading");
+  const [saveState, setSaveState] =
+    useState<SaveState>("loading");
 
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
+    const currentDocument = loadDocument();
 
-      if (stored) {
-        const parsed: unknown = JSON.parse(stored);
-
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          "data" in parsed &&
-          isValidCVData(parsed.data)
-        ) {
-          setCv(parsed.data);
-        } else if (isValidCVData(parsed)) {
-          setCv(parsed);
-        }
-      }
-    } catch {
-      // Ignore invalid or unavailable local storage data.
-    } finally {
+    if (currentDocument) {
+      setCv(currentDocument);
       setHasLoaded(true);
       setSaveState("saved");
+      return;
     }
+
+    const legacyValue = getLegacyStoredValue();
+
+    if (legacyValue) {
+      let legacyData: unknown = legacyValue;
+
+      if (
+        typeof legacyValue === "object" &&
+        legacyValue !== null &&
+        "data" in legacyValue
+      ) {
+        legacyData = legacyValue.data;
+      }
+
+      const migrated = createDocumentFromLegacyCV(
+        legacyData,
+      );
+
+      if (migrated) {
+        setCv(migrated);
+
+        // Persist the migrated document immediately so the
+        // old format is replaced by the new document model.
+        saveDocument(migrated);
+
+        setHasLoaded(true);
+        setSaveState("saved");
+        return;
+      }
+    }
+
+    setHasLoaded(true);
+    setSaveState("saved");
   }, []);
 
   useEffect(() => {
@@ -149,44 +146,34 @@ export default function Home() {
     setSaveState("saving");
 
     const timeout = window.setTimeout(() => {
-      try {
-        const stored: StoredCV = {
-          version: 1,
-          data: cv,
-        };
-
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(stored),
-        );
-
-        setSaveState("saved");
-      } catch {
-        setSaveState("saved");
-      }
+      const saved = saveDocument(cv);
+      setSaveState(saved ? "saved" : "error");
     }, 350);
 
     return () => window.clearTimeout(timeout);
   }, [cv, hasLoaded]);
 
-  function updateBasics(
-    field: keyof CVData["basics"],
+  const basics = getBasics(cv);
+  const summary = getSummary(cv);
+  const skills = getSkills(cv);
+  const experience = getExperience(cv);
+  const education = getEducation(cv);
+  const projects = getProjects(cv);
+  const certifications = getCertifications(cv);
+
+  function updateBasicField(
+    field: keyof CVBasics,
     value: string,
   ) {
-    setCv((current) => ({
-      ...current,
-      basics: {
-        ...current.basics,
-        [field]: value,
-      },
-    }));
+    setCv((current) =>
+      updateBasics(current, field, value),
+    );
   }
 
-  function updateSummary(value: string) {
-    setCv((current) => ({
-      ...current,
-      summary: value,
-    }));
+  function updateSummaryValue(value: string) {
+    setCv((current) =>
+      updateSectionData(current, "summary", value),
+    );
   }
 
   function addSkill() {
@@ -195,31 +182,43 @@ export default function Home() {
     if (!skill) return;
 
     setCv((current) => {
-      if (current.skills.includes(skill)) return current;
+      const currentSkills = getSkills(current);
 
-      return {
-        ...current,
-        skills: [...current.skills, skill],
-      };
+      if (
+        currentSkills.some(
+          (item) =>
+            item.toLowerCase() === skill.toLowerCase(),
+        )
+      ) {
+        return current;
+      }
+
+      return updateSkills(current, [
+        ...currentSkills,
+        skill,
+      ]);
     });
 
     setSkillInput("");
   }
 
   function removeSkill(skill: string) {
-    setCv((current) => ({
-      ...current,
-      skills: current.skills.filter((item) => item !== skill),
-    }));
+    setCv((current) =>
+      updateSkills(
+        current,
+        getSkills(current).filter(
+          (item) => item !== skill,
+        ),
+      ),
+    );
   }
 
   function addExperience() {
-    setCv((current) => ({
-      ...current,
-      experience: [
-        ...current.experience,
+    setCv((current) =>
+      updateExperience(current, [
+        ...getExperience(current),
         {
-          id: createId(),
+          id: createId("experience"),
           role: "",
           company: "",
           location: "",
@@ -227,138 +226,165 @@ export default function Home() {
           endDate: "",
           description: "",
         },
-      ],
-    }));
+      ]),
+    );
   }
 
-  function updateExperience(
+  function updateExperienceItem(
     id: string,
     field: keyof Experience,
     value: string,
   ) {
-    setCv((current) => ({
-      ...current,
-      experience: current.experience.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
+    setCv((current) =>
+      updateExperience(
+        current,
+        getExperience(current).map((item) =>
+          item.id === id
+            ? { ...item, [field]: value }
+            : item,
+        ),
       ),
-    }));
+    );
   }
 
   function removeExperience(id: string) {
-    setCv((current) => ({
-      ...current,
-      experience: current.experience.filter((item) => item.id !== id),
-    }));
+    setCv((current) =>
+      updateExperience(
+        current,
+        getExperience(current).filter(
+          (item) => item.id !== id,
+        ),
+      ),
+    );
   }
 
   function addEducation() {
-    setCv((current) => ({
-      ...current,
-      education: [
-        ...current.education,
+    setCv((current) =>
+      updateEducation(current, [
+        ...getEducation(current),
         {
-          id: createId(),
+          id: createId("education"),
           degree: "",
           school: "",
           location: "",
           startDate: "",
           endDate: "",
         },
-      ],
-    }));
+      ]),
+    );
   }
 
-  function updateEducation(
+  function updateEducationItem(
     id: string,
     field: keyof Education,
     value: string,
   ) {
-    setCv((current) => ({
-      ...current,
-      education: current.education.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
+    setCv((current) =>
+      updateEducation(
+        current,
+        getEducation(current).map((item) =>
+          item.id === id
+            ? { ...item, [field]: value }
+            : item,
+        ),
       ),
-    }));
+    );
   }
 
   function removeEducation(id: string) {
-    setCv((current) => ({
-      ...current,
-      education: current.education.filter((item) => item.id !== id),
-    }));
+    setCv((current) =>
+      updateEducation(
+        current,
+        getEducation(current).filter(
+          (item) => item.id !== id,
+        ),
+      ),
+    );
   }
 
   function addProject() {
-    setCv((current) => ({
-      ...current,
-      projects: [
-        ...current.projects,
+    setCv((current) =>
+      updateProjects(current, [
+        ...getProjects(current),
         {
-          id: createId(),
+          id: createId("project"),
           name: "",
           description: "",
           link: "",
         },
-      ],
-    }));
+      ]),
+    );
   }
 
-  function updateProject(
+  function updateProjectItem(
     id: string,
     field: keyof Project,
     value: string,
   ) {
-    setCv((current) => ({
-      ...current,
-      projects: current.projects.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
+    setCv((current) =>
+      updateProjects(
+        current,
+        getProjects(current).map((item) =>
+          item.id === id
+            ? { ...item, [field]: value }
+            : item,
+        ),
       ),
-    }));
+    );
   }
 
   function removeProject(id: string) {
-    setCv((current) => ({
-      ...current,
-      projects: current.projects.filter((item) => item.id !== id),
-    }));
+    setCv((current) =>
+      updateProjects(
+        current,
+        getProjects(current).filter(
+          (item) => item.id !== id,
+        ),
+      ),
+    );
   }
 
   function addCertification() {
-    setCv((current) => ({
-      ...current,
-      certifications: [
-        ...current.certifications,
+    setCv((current) =>
+      updateCertifications(current, [
+        ...getCertifications(current),
         {
-          id: createId(),
+          id: createId("certification"),
           name: "",
           issuer: "",
           date: "",
           link: "",
         },
-      ],
-    }));
+      ]),
+    );
   }
 
-  function updateCertification(
+  function updateCertificationItem(
     id: string,
     field: keyof Certification,
     value: string,
   ) {
-    setCv((current) => ({
-      ...current,
-      certifications: current.certifications.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
+    setCv((current) =>
+      updateCertifications(
+        current,
+        getCertifications(current).map((item) =>
+          item.id === id
+            ? { ...item, [field]: value }
+            : item,
+        ),
       ),
-    }));
+    );
   }
 
   function removeCertification(id: string) {
-    setCv((current) => ({
-      ...current,
-      certifications: current.certifications.filter(
-        (item) => item.id !== id,
+    setCv((current) =>
+      updateCertifications(
+        current,
+        getCertifications(current).filter(
+          (item) => item.id !== id,
+        ),
       ),
-    }));
+    );
   }
 
   function resetCV() {
@@ -368,27 +394,52 @@ export default function Home() {
 
     if (!confirmed) return;
 
-    setCv(cloneInitialCV());
+    const nextDocument = createDefaultDocument();
+
+    setCv(nextDocument);
     setActiveSection("personal");
     setSkillInput("");
+
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage errors. Autosave will attempt to persist
+      // the fresh document again.
+    }
   }
 
   function exportJSON() {
-    const stored: StoredCV = {
-      version: 1,
-      data: cv,
-    };
+    const validationErrors = validateCVDocument(cv);
 
-    const blob = new Blob([JSON.stringify(stored, null, 2)], {
-      type: "application/json",
-    });
+    if (validationErrors.length > 0) {
+      window.alert(
+        `This CV cannot be exported because its document data is invalid.\n\n${validationErrors.join(
+          "\n",
+        )}`,
+      );
+      return;
+    }
+
+    const blob = new Blob(
+      [JSON.stringify(cv, null, 2)],
+      {
+        type: "application/json",
+      },
+    );
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "cv-studio-document.json";
+    link.download = `${cv.name
+      .trim()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .toLowerCase() || "cv-studio-document"}.json`;
+
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     URL.revokeObjectURL(url);
   }
@@ -397,7 +448,9 @@ export default function Home() {
     importInputRef.current?.click();
   }
 
-  async function importJSON(event: ChangeEvent<HTMLInputElement>) {
+  async function importJSON(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0];
 
     if (!file) return;
@@ -406,31 +459,45 @@ export default function Home() {
       const text = await file.text();
       const parsed: unknown = JSON.parse(text);
 
-      let importedData: CVData | null = null;
+      let importedDocument: CVDocument | null =
+        null;
 
-      if (
+      if (isValidCVDocument(parsed)) {
+        importedDocument = parsed;
+      } else if (
         parsed &&
         typeof parsed === "object" &&
-        "data" in parsed &&
-        isValidCVData(parsed.data)
+        "document" in parsed &&
+        isValidCVDocument(parsed.document)
       ) {
-        importedData = parsed.data;
-      } else if (isValidCVData(parsed)) {
-        importedData = parsed;
+        importedDocument = parsed.document;
       }
 
-      if (!importedData) {
+      if (!importedDocument) {
+        const errors = validateCVDocument(parsed);
+
         window.alert(
-          "This file does not contain a valid CV Studio document.",
+          `This file is not a valid CV Studio document.${
+            errors.length
+              ? `\n\n${errors.join("\n")}`
+              : ""
+          }`,
         );
+
         return;
       }
 
-      setCv(importedData);
+      const normalizedDocument: CVDocument = {
+        ...importedDocument,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setCv(normalizedDocument);
       setActiveSection("personal");
+      setSkillInput("");
     } catch {
       window.alert(
-        "The selected file could not be imported. Make sure it is a valid CV JSON file.",
+        "The selected file could not be imported. Make sure it is valid JSON and was exported from CV Studio.",
       );
     } finally {
       event.target.value = "";
@@ -458,6 +525,7 @@ export default function Home() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#73736e]">
               CV Studio
             </p>
+
             <h1 className="text-lg font-semibold tracking-tight">
               Create your CV
             </h1>
@@ -468,6 +536,7 @@ export default function Home() {
               {saveState === "loading" && "Loading…"}
               {saveState === "saving" && "Saving…"}
               {saveState === "saved" && "Saved locally"}
+              {saveState === "error" && "Save failed"}
             </span>
 
             <button
@@ -539,52 +608,75 @@ export default function Home() {
                 >
                   <Field
                     label="Full name"
-                    value={cv.basics.name}
-                    onChange={(value) => updateBasics("name", value)}
+                    value={basics.name}
+                    onChange={(value) =>
+                      updateBasicField("name", value)
+                    }
                     placeholder="e.g. John Doe"
                   />
 
                   <Field
                     label="Professional title"
-                    value={cv.basics.title}
-                    onChange={(value) => updateBasics("title", value)}
+                    value={basics.title}
+                    onChange={(value) =>
+                      updateBasicField("title", value)
+                    }
                     placeholder="e.g. Frontend Developer"
                   />
 
                   <div className="grid grid-cols-2 gap-3">
                     <Field
                       label="Email"
-                      value={cv.basics.email}
-                      onChange={(value) => updateBasics("email", value)}
+                      value={basics.email}
+                      onChange={(value) =>
+                        updateBasicField("email", value)
+                      }
                       placeholder="you@example.com"
                     />
 
                     <Field
                       label="Phone"
-                      value={cv.basics.phone}
-                      onChange={(value) => updateBasics("phone", value)}
+                      value={basics.phone}
+                      onChange={(value) =>
+                        updateBasicField("phone", value)
+                      }
                       placeholder="+234..."
                     />
                   </div>
 
                   <Field
                     label="Location"
-                    value={cv.basics.location}
-                    onChange={(value) => updateBasics("location", value)}
+                    value={basics.location}
+                    onChange={(value) =>
+                      updateBasicField(
+                        "location",
+                        value,
+                      )
+                    }
                     placeholder="City, Country"
                   />
 
                   <Field
                     label="Website"
-                    value={cv.basics.website}
-                    onChange={(value) => updateBasics("website", value)}
+                    value={basics.website}
+                    onChange={(value) =>
+                      updateBasicField(
+                        "website",
+                        value,
+                      )
+                    }
                     placeholder="yourwebsite.com"
                   />
 
                   <Field
                     label="LinkedIn"
-                    value={cv.basics.linkedin}
-                    onChange={(value) => updateBasics("linkedin", value)}
+                    value={basics.linkedin}
+                    onChange={(value) =>
+                      updateBasicField(
+                        "linkedin",
+                        value,
+                      )
+                    }
                     placeholder="linkedin.com/in/..."
                   />
                 </EditorGroup>
@@ -594,8 +686,8 @@ export default function Home() {
                   description="A short introduction that tells an employer what you bring."
                 >
                   <Textarea
-                    value={cv.summary}
-                    onChange={updateSummary}
+                    value={summary}
+                    onChange={updateSummaryValue}
                     placeholder="Write 2–4 sentences about your professional background, strengths and focus."
                   />
                 </EditorGroup>
@@ -614,18 +706,18 @@ export default function Home() {
 
             {activeSection === "experience" && (
               <ExperienceEditor
-                items={cv.experience}
+                items={experience}
                 onAdd={addExperience}
-                onUpdate={updateExperience}
+                onUpdate={updateExperienceItem}
                 onRemove={removeExperience}
               />
             )}
 
             {activeSection === "education" && (
               <EducationEditor
-                items={cv.education}
+                items={education}
                 onAdd={addEducation}
-                onUpdate={updateEducation}
+                onUpdate={updateEducationItem}
                 onRemove={removeEducation}
               />
             )}
@@ -660,13 +752,15 @@ export default function Home() {
                   </button>
                 </div>
 
-                {cv.skills.length > 0 && (
+                {skills.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {cv.skills.map((skill) => (
+                    {skills.map((skill) => (
                       <button
                         key={skill}
                         type="button"
-                        onClick={() => removeSkill(skill)}
+                        onClick={() =>
+                          removeSkill(skill)
+                        }
                         className="border border-[#d2d2cc] bg-white px-3 py-1.5 text-xs hover:border-[#999]"
                         title="Remove skill"
                       >
@@ -676,9 +770,10 @@ export default function Home() {
                   </div>
                 )}
 
-                {cv.skills.length === 0 && (
+                {skills.length === 0 && (
                   <EmptyText>
-                    No skills added yet. Add your most relevant skills.
+                    No skills added yet. Add your most
+                    relevant skills.
                   </EmptyText>
                 )}
               </EditorGroup>
@@ -686,18 +781,18 @@ export default function Home() {
 
             {activeSection === "projects" && (
               <ProjectEditor
-                items={cv.projects}
+                items={projects}
                 onAdd={addProject}
-                onUpdate={updateProject}
+                onUpdate={updateProjectItem}
                 onRemove={removeProject}
               />
             )}
 
             {activeSection === "certifications" && (
               <CertificationEditor
-                items={cv.certifications}
+                items={certifications}
                 onAdd={addCertification}
-                onUpdate={updateCertification}
+                onUpdate={updateCertificationItem}
                 onRemove={removeCertification}
               />
             )}
@@ -714,47 +809,68 @@ export default function Home() {
   );
 }
 
-function CVPreview({ cv }: { cv: CVData }) {
+function CVPreview({ cv }: { cv: CVDocument }) {
+  const basics = getBasics(cv);
+  const summary = getSummary(cv);
+  const skills = getSkills(cv);
+  const experience = getExperience(cv);
+  const education = getEducation(cv);
+  const projects = getProjects(cv);
+  const certifications = getCertifications(cv);
+
   const hasContact =
-    cv.basics.email ||
-    cv.basics.phone ||
-    cv.basics.location ||
-    cv.basics.website ||
-    cv.basics.linkedin;
+    basics.email ||
+    basics.phone ||
+    basics.location ||
+    basics.website ||
+    basics.linkedin;
 
   return (
     <article className="cv-paper">
       <header className="cv-section-keep-together border-b-[1.5px] border-[#222] pb-5">
         <h2 className="text-[30px] font-semibold tracking-[-0.035em] text-[#111]">
-          {cv.basics.name || "Your Name"}
+          {basics.name || "Your Name"}
         </h2>
 
         <p className="mt-1 text-[15px] font-medium text-[#555]">
-          {cv.basics.title || "Professional Title"}
+          {basics.title || "Professional Title"}
         </p>
 
         {hasContact && (
           <div className="mt-4 flex max-w-[650px] flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-[#555]">
-            {cv.basics.email && <span>{cv.basics.email}</span>}
-            {cv.basics.phone && <span>{cv.basics.phone}</span>}
-            {cv.basics.location && <span>{cv.basics.location}</span>}
-            {cv.basics.website && <span>{cv.basics.website}</span>}
-            {cv.basics.linkedin && <span>{cv.basics.linkedin}</span>}
+            {basics.email && (
+              <span>{basics.email}</span>
+            )}
+            {basics.phone && (
+              <span>{basics.phone}</span>
+            )}
+            {basics.location && (
+              <span>{basics.location}</span>
+            )}
+            {basics.website && (
+              <span>{basics.website}</span>
+            )}
+            {basics.linkedin && (
+              <span>{basics.linkedin}</span>
+            )}
           </div>
         )}
       </header>
 
-      {cv.summary && (
+      {summary && (
         <CVSection title="Profile">
-          <p>{cv.summary}</p>
+          <p>{summary}</p>
         </CVSection>
       )}
 
-      {cv.experience.length > 0 && (
+      {experience.length > 0 && (
         <CVSection title="Experience">
           <div className="space-y-4">
-            {cv.experience.map((item) => (
-              <div key={item.id} className="cv-entry-keep-together">
+            {experience.map((item) => (
+              <div
+                key={item.id}
+                className="cv-entry-keep-together"
+              >
                 <div className="flex justify-between gap-6">
                   <div>
                     <p className="font-semibold text-[#111]">
@@ -763,14 +879,20 @@ function CVPreview({ cv }: { cv: CVData }) {
 
                     <p className="mt-0.5">
                       {item.company || "Company"}
-                      {item.location ? ` · ${item.location}` : ""}
+                      {item.location
+                        ? ` · ${item.location}`
+                        : ""}
                     </p>
                   </div>
 
-                  {(item.startDate || item.endDate) && (
+                  {(item.startDate ||
+                    item.endDate) && (
                     <p className="whitespace-nowrap text-[10px] text-[#666]">
                       {item.startDate}
-                      {item.startDate || item.endDate ? " — " : ""}
+                      {item.startDate ||
+                      item.endDate
+                        ? " — "
+                        : ""}
                       {item.endDate}
                     </p>
                   )}
@@ -787,11 +909,14 @@ function CVPreview({ cv }: { cv: CVData }) {
         </CVSection>
       )}
 
-      {cv.projects.length > 0 && (
+      {projects.length > 0 && (
         <CVSection title="Projects">
           <div className="space-y-4">
-            {cv.projects.map((item) => (
-              <div key={item.id} className="cv-entry-keep-together">
+            {projects.map((item) => (
+              <div
+                key={item.id}
+                className="cv-entry-keep-together"
+              >
                 <p className="font-semibold text-[#111]">
                   {item.name || "Project"}
                 </p>
@@ -803,7 +928,7 @@ function CVPreview({ cv }: { cv: CVData }) {
                 )}
 
                 {item.link && (
-                  <p className="mt-1 text-[10px] text-[#666]">
+                  <p className="mt-1 break-words text-[10px] text-[#666]">
                     {item.link}
                   </p>
                 )}
@@ -813,27 +938,38 @@ function CVPreview({ cv }: { cv: CVData }) {
         </CVSection>
       )}
 
-      {cv.education.length > 0 && (
+      {education.length > 0 && (
         <CVSection title="Education">
           <div className="space-y-4">
-            {cv.education.map((item) => (
-              <div key={item.id} className="cv-entry-keep-together">
+            {education.map((item) => (
+              <div
+                key={item.id}
+                className="cv-entry-keep-together"
+              >
                 <div className="flex justify-between gap-6">
                   <div>
                     <p className="font-semibold text-[#111]">
-                      {item.degree || "Degree or qualification"}
+                      {item.degree ||
+                        "Degree or qualification"}
                     </p>
 
                     <p className="mt-0.5">
-                      {item.school || "Institution"}
-                      {item.location ? ` · ${item.location}` : ""}
+                      {item.school ||
+                        "Institution"}
+                      {item.location
+                        ? ` · ${item.location}`
+                        : ""}
                     </p>
                   </div>
 
-                  {(item.startDate || item.endDate) && (
+                  {(item.startDate ||
+                    item.endDate) && (
                     <p className="whitespace-nowrap text-[10px] text-[#666]">
                       {item.startDate}
-                      {item.startDate || item.endDate ? " — " : ""}
+                      {item.startDate ||
+                      item.endDate
+                        ? " — "
+                        : ""}
                       {item.endDate}
                     </p>
                   )}
@@ -844,28 +980,39 @@ function CVPreview({ cv }: { cv: CVData }) {
         </CVSection>
       )}
 
-      {cv.certifications.length > 0 && (
+      {certifications.length > 0 && (
         <CVSection title="Certifications">
           <div className="space-y-3">
-            {cv.certifications.map((item) => (
-              <div key={item.id} className="cv-entry-keep-together">
+            {certifications.map((item) => (
+              <div
+                key={item.id}
+                className="cv-entry-keep-together"
+              >
                 <p className="font-semibold text-[#111]">
                   {item.name || "Certification"}
                 </p>
 
                 <p>
                   {item.issuer}
-                  {item.date ? ` · ${item.date}` : ""}
+                  {item.date
+                    ? ` · ${item.date}`
+                    : ""}
                 </p>
+
+                {item.link && (
+                  <p className="mt-1 break-words text-[10px] text-[#666]">
+                    {item.link}
+                  </p>
+                )}
               </div>
             ))}
           </div>
         </CVSection>
       )}
 
-      {cv.skills.length > 0 && (
+      {skills.length > 0 && (
         <CVSection title="Skills">
-          <p>{cv.skills.join(" · ")}</p>
+          <p>{skills.join(" · ")}</p>
         </CVSection>
       )}
     </article>
@@ -892,10 +1039,14 @@ function ExperienceEditor({
       title="Experience"
       description="Start with your most recent or most relevant work experience."
     >
-      <AddButton onClick={onAdd}>Add experience</AddButton>
+      <AddButton onClick={onAdd}>
+        Add experience
+      </AddButton>
 
       {items.length === 0 && (
-        <EmptyText>No experience added yet.</EmptyText>
+        <EmptyText>
+          No experience added yet.
+        </EmptyText>
       )}
 
       {items.map((item, index) => (
@@ -920,21 +1071,35 @@ function ExperienceEditor({
           <Field
             label="Role"
             value={item.role}
-            onChange={(value) => onUpdate(item.id, "role", value)}
+            onChange={(value) =>
+              onUpdate(item.id, "role", value)
+            }
             placeholder="e.g. Frontend Developer"
           />
 
           <Field
             label="Company"
             value={item.company}
-            onChange={(value) => onUpdate(item.id, "company", value)}
+            onChange={(value) =>
+              onUpdate(
+                item.id,
+                "company",
+                value,
+              )
+            }
             placeholder="Company name"
           />
 
           <Field
             label="Location"
             value={item.location}
-            onChange={(value) => onUpdate(item.id, "location", value)}
+            onChange={(value) =>
+              onUpdate(
+                item.id,
+                "location",
+                value,
+              )
+            }
             placeholder="City, Country"
           />
 
@@ -943,7 +1108,11 @@ function ExperienceEditor({
               label="Start"
               value={item.startDate}
               onChange={(value) =>
-                onUpdate(item.id, "startDate", value)
+                onUpdate(
+                  item.id,
+                  "startDate",
+                  value,
+                )
               }
               placeholder="Jan 2024"
             />
@@ -952,7 +1121,11 @@ function ExperienceEditor({
               label="End"
               value={item.endDate}
               onChange={(value) =>
-                onUpdate(item.id, "endDate", value)
+                onUpdate(
+                  item.id,
+                  "endDate",
+                  value,
+                )
               }
               placeholder="Present"
             />
@@ -962,7 +1135,11 @@ function ExperienceEditor({
             label="Description"
             value={item.description}
             onChange={(value) =>
-              onUpdate(item.id, "description", value)
+              onUpdate(
+                item.id,
+                "description",
+                value,
+              )
             }
             placeholder="Describe your responsibilities, achievements and measurable results."
           />
@@ -992,10 +1169,14 @@ function EducationEditor({
       title="Education"
       description="Add your relevant academic or professional qualifications."
     >
-      <AddButton onClick={onAdd}>Add education</AddButton>
+      <AddButton onClick={onAdd}>
+        Add education
+      </AddButton>
 
       {items.length === 0 && (
-        <EmptyText>No education added yet.</EmptyText>
+        <EmptyText>
+          No education added yet.
+        </EmptyText>
       )}
 
       {items.map((item, index) => (
@@ -1021,7 +1202,11 @@ function EducationEditor({
             label="Degree / qualification"
             value={item.degree}
             onChange={(value) =>
-              onUpdate(item.id, "degree", value)
+              onUpdate(
+                item.id,
+                "degree",
+                value,
+              )
             }
             placeholder="e.g. B.Sc. Computer Science"
           />
@@ -1030,7 +1215,11 @@ function EducationEditor({
             label="School / institution"
             value={item.school}
             onChange={(value) =>
-              onUpdate(item.id, "school", value)
+              onUpdate(
+                item.id,
+                "school",
+                value,
+              )
             }
             placeholder="Institution name"
           />
@@ -1039,7 +1228,11 @@ function EducationEditor({
             label="Location"
             value={item.location}
             onChange={(value) =>
-              onUpdate(item.id, "location", value)
+              onUpdate(
+                item.id,
+                "location",
+                value,
+              )
             }
             placeholder="City, Country"
           />
@@ -1049,7 +1242,11 @@ function EducationEditor({
               label="Start"
               value={item.startDate}
               onChange={(value) =>
-                onUpdate(item.id, "startDate", value)
+                onUpdate(
+                  item.id,
+                  "startDate",
+                  value,
+                )
               }
               placeholder="2020"
             />
@@ -1058,7 +1255,11 @@ function EducationEditor({
               label="End"
               value={item.endDate}
               onChange={(value) =>
-                onUpdate(item.id, "endDate", value)
+                onUpdate(
+                  item.id,
+                  "endDate",
+                  value,
+                )
               }
               placeholder="2024"
             />
@@ -1089,10 +1290,14 @@ function ProjectEditor({
       title="Projects"
       description="Showcase relevant work, personal projects or major accomplishments."
     >
-      <AddButton onClick={onAdd}>Add project</AddButton>
+      <AddButton onClick={onAdd}>
+        Add project
+      </AddButton>
 
       {items.length === 0 && (
-        <EmptyText>No projects added yet.</EmptyText>
+        <EmptyText>
+          No projects added yet.
+        </EmptyText>
       )}
 
       {items.map((item, index) => (
@@ -1117,7 +1322,13 @@ function ProjectEditor({
           <Field
             label="Project name"
             value={item.name}
-            onChange={(value) => onUpdate(item.id, "name", value)}
+            onChange={(value) =>
+              onUpdate(
+                item.id,
+                "name",
+                value,
+              )
+            }
             placeholder="Project name"
           />
 
@@ -1125,7 +1336,11 @@ function ProjectEditor({
             label="Description"
             value={item.description}
             onChange={(value) =>
-              onUpdate(item.id, "description", value)
+              onUpdate(
+                item.id,
+                "description",
+                value,
+              )
             }
             placeholder="What did you build, improve or accomplish?"
           />
@@ -1133,7 +1348,13 @@ function ProjectEditor({
           <Field
             label="Link"
             value={item.link}
-            onChange={(value) => onUpdate(item.id, "link", value)}
+            onChange={(value) =>
+              onUpdate(
+                item.id,
+                "link",
+                value,
+              )
+            }
             placeholder="https://..."
           />
         </div>
@@ -1162,10 +1383,14 @@ function CertificationEditor({
       title="Certifications"
       description="Add professional certifications, courses or credentials."
     >
-      <AddButton onClick={onAdd}>Add certification</AddButton>
+      <AddButton onClick={onAdd}>
+        Add certification
+      </AddButton>
 
       {items.length === 0 && (
-        <EmptyText>No certifications added yet.</EmptyText>
+        <EmptyText>
+          No certifications added yet.
+        </EmptyText>
       )}
 
       {items.map((item, index) => (
@@ -1191,7 +1416,11 @@ function CertificationEditor({
             label="Certification"
             value={item.name}
             onChange={(value) =>
-              onUpdate(item.id, "name", value)
+              onUpdate(
+                item.id,
+                "name",
+                value,
+              )
             }
             placeholder="Certification name"
           />
@@ -1200,7 +1429,11 @@ function CertificationEditor({
             label="Issuer"
             value={item.issuer}
             onChange={(value) =>
-              onUpdate(item.id, "issuer", value)
+              onUpdate(
+                item.id,
+                "issuer",
+                value,
+              )
             }
             placeholder="Issuing organization"
           />
@@ -1209,7 +1442,11 @@ function CertificationEditor({
             label="Date"
             value={item.date}
             onChange={(value) =>
-              onUpdate(item.id, "date", value)
+              onUpdate(
+                item.id,
+                "date",
+                value,
+              )
             }
             placeholder="2025"
           />
@@ -1218,7 +1455,11 @@ function CertificationEditor({
             label="Link"
             value={item.link}
             onChange={(value) =>
-              onUpdate(item.id, "link", value)
+              onUpdate(
+                item.id,
+                "link",
+                value,
+              )
             }
             placeholder="https://..."
           />
@@ -1233,7 +1474,7 @@ function CVSection({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="cv-section-keep-together mt-7">
@@ -1255,19 +1496,23 @@ function EditorGroup({
 }: {
   title: string;
   description: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section>
       <div className="mb-4">
-        <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-sm font-semibold tracking-tight">
+          {title}
+        </h2>
 
         <p className="mt-1 text-xs leading-5 text-[#7a7a74]">
           {description}
         </p>
       </div>
 
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-4">
+        {children}
+      </div>
     </section>
   );
 }
@@ -1276,7 +1521,7 @@ function AddButton({
   children,
   onClick,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -1309,7 +1554,9 @@ function Field({
 
       <input
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
         placeholder={placeholder}
         className="w-full border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
       />
@@ -1338,7 +1585,9 @@ function Textarea({
 
       <textarea
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
         placeholder={placeholder}
         rows={6}
         className="w-full resize-y border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
@@ -1347,7 +1596,11 @@ function Textarea({
   );
 }
 
-function EmptyText({ children }: { children: React.ReactNode }) {
+function EmptyText({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <p className="border border-dashed border-[#d2d2cc] px-4 py-4 text-xs leading-5 text-[#777]">
       {children}
