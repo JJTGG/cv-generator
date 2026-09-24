@@ -53,24 +53,64 @@ export type CVSectionType =
   | "certifications"
   | "custom";
 
-export type CVSection = {
+type CVSectionBase = {
   id: string;
-  type: CVSectionType;
   title: string;
   visible: boolean;
   order: number;
-  data:
-    | CVBasics
-    | string
-    | string[]
-    | Experience[]
-    | Education[]
-    | Project[]
-    | Certification[]
-    | {
-        content: string;
-      };
 };
+
+export type CVBasicsSection = CVSectionBase & {
+  type: "basics";
+  data: CVBasics;
+};
+
+export type CVSummarySection = CVSectionBase & {
+  type: "summary";
+  data: string;
+};
+
+export type CVExperienceSection = CVSectionBase & {
+  type: "experience";
+  data: Experience[];
+};
+
+export type CVEducationSection = CVSectionBase & {
+  type: "education";
+  data: Education[];
+};
+
+export type CVSkillsSection = CVSectionBase & {
+  type: "skills";
+  data: string[];
+};
+
+export type CVProjectsSection = CVSectionBase & {
+  type: "projects";
+  data: Project[];
+};
+
+export type CVCertificationsSection = CVSectionBase & {
+  type: "certifications";
+  data: Certification[];
+};
+
+export type CVCustomSection = CVSectionBase & {
+  type: "custom";
+  data: {
+    content: string;
+  };
+};
+
+export type CVSection =
+  | CVBasicsSection
+  | CVSummarySection
+  | CVExperienceSection
+  | CVEducationSection
+  | CVSkillsSection
+  | CVProjectsSection
+  | CVCertificationsSection
+  | CVCustomSection;
 
 export type CVDocumentSettings = {
   templateId: string;
