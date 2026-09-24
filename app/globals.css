@@ -62,7 +62,8 @@ body {
   }
 
   .cv-app-header,
-  .cv-editor-sidebar {
+  .cv-editor-sidebar,
+  .cv-import-error {
     display: none !important;
   }
 
@@ -83,7 +84,7 @@ body {
     background: #ffffff !important;
   }
 
-  .cv-print-root > div {
+  .cv-print-page {
     display: block !important;
     width: auto !important;
     margin: 0 !important;
