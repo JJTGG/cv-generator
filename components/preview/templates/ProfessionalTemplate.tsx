@@ -37,6 +37,44 @@ function isCustomSectionData(
   );
 }
 
+function hasExperienceContent(item: Experience) {
+  return [
+    item.role,
+    item.company,
+    item.location,
+    item.startDate,
+    item.endDate,
+    item.description,
+  ].some(hasText);
+}
+
+function hasEducationContent(item: Education) {
+  return [
+    item.degree,
+    item.school,
+    item.location,
+    item.startDate,
+    item.endDate,
+  ].some(hasText);
+}
+
+function hasProjectContent(item: Project) {
+  return [
+    item.name,
+    item.description,
+    item.link,
+  ].some(hasText);
+}
+
+function hasCertificationContent(item: Certification) {
+  return [
+    item.name,
+    item.issuer,
+    item.date,
+    item.link,
+  ].some(hasText);
+}
+
 function hasSectionContent(
   document: CVDocument,
   section: CVSection,
@@ -57,16 +95,24 @@ function hasSectionContent(
       return getSkills(document).some(hasText);
 
     case "experience":
-      return getExperience(document).length > 0;
+      return getExperience(document).some(
+        hasExperienceContent,
+      );
 
     case "education":
-      return getEducation(document).length > 0;
+      return getEducation(document).some(
+        hasEducationContent,
+      );
 
     case "projects":
-      return getProjects(document).length > 0;
+      return getProjects(document).some(
+        hasProjectContent,
+      );
 
     case "certifications":
-      return getCertifications(document).length > 0;
+      return getCertifications(document).some(
+        hasCertificationContent,
+      );
 
     case "custom":
       return (
@@ -273,11 +319,24 @@ export function ProfessionalTemplate({
 }: ProfessionalTemplateProps) {
   const basics = getBasics(document);
   const summary = getSummary(document);
+
   const skills = getSkills(document).filter(hasText);
-  const experience = getExperience(document);
-  const education = getEducation(document);
-  const projects = getProjects(document);
-  const certifications = getCertifications(document);
+
+  const experience = getExperience(document).filter(
+    hasExperienceContent,
+  );
+
+  const education = getEducation(document).filter(
+    hasEducationContent,
+  );
+
+  const projects = getProjects(document).filter(
+    hasProjectContent,
+  );
+
+  const certifications = getCertifications(document).filter(
+    hasCertificationContent,
+  );
 
   const visibleSections = [...document.sections]
     .filter((section) => section.visible)
@@ -430,9 +489,7 @@ export function ProfessionalTemplate({
             return (
               <Section
                 key={section.id}
-                title={
-                  section.title || "Certifications"
-                }
+                title={section.title || "Certifications"}
               >
                 <div className="space-y-5">
                   {certifications.map((item) => (
