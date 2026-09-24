@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  ChangeEvent,
-  ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+
 import type {
   Certification,
   CVBasics,
@@ -15,8 +11,10 @@ import type {
   Experience,
   Project,
 } from "@/lib/document/types";
-import { createDefaultDocument } from "@/lib/document/defaults";
-import { ProfessionalTemplate } from "@/components/preview/templates/ProfessionalTemplate";
+import {
+  createDefaultDocument,
+  createDefaultSections,
+} from "@/lib/document/defaults";
 import {
   createDocumentFromLegacyCV,
   getBasics,
@@ -33,108 +31,492 @@ import {
   updateProjects,
   updateSectionData,
   updateSkills,
+  updateSummary,
 } from "@/lib/document/operations";
-import {
-  isValidCVDocument,
-  validateCVDocument,
-} from "@/lib/document/validation";
-import {
-  loadDocument,
-  saveDocument,
-} from "@/lib/persistence/localStorage";
+import { isValidCVDocument } from "@/lib/document/validation";
+import { loadDocument, removeDocument, saveDocument } from "@/lib/persistence/localStorage";
+import { ProfessionalTemplate } from "@/components/preview/templates/ProfessionalTemplate";
 
 const STORAGE_KEY = "cv-studio-document";
 
-type SaveState = "loading" | "saved" | "saving" | "error";
-
-function createId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+function createItemId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getLegacyStoredValue(): unknown | null {
-  if (typeof window === "undefined") return null;
+function EditorField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-gray-500">
+        {label}
+      </span>
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) return null;
-
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export default function Home() {
-  const [cv, setCv] = useState<CVDocument>(() =>
-    createDefaultDocument(),
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-700"
+      />
+    </label>
   );
-  const [activeSection, setActiveSection] = useState("personal");
-  const [skillInput, setSkillInput] = useState("");
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [saveState, setSaveState] =
-    useState<SaveState>("loading");
+}
 
-  const importInputRef = useRef<HTMLInputElement>(null);
+function EditorTextarea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 5,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-gray-500">
+        {label}
+      </span>
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className="w-full resize-y border border-gray-300 bg-white px-3 py-2.5 text-sm leading-relaxed text-gray-900 outline-none transition focus:border-gray-700"
+      />
+    </label>
+  );
+}
+
+function EditorSection({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="border-b border-gray-200 px-5 py-6">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        {action}
+      </div>
+
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function ItemActions({
+  onRemove,
+}: {
+  onRemove: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      className="text-xs font-medium text-gray-500 underline decoration-gray-300 underline-offset-4 transition hover:text-red-600"
+    >
+      Remove
+    </button>
+  );
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-sm leading-relaxed text-gray-500">
+      {children}
+    </p>
+  );
+}
+
+export default function HomePage() {
+  const [cv, setCv] = useState<CVDocument | null>(null);
+  const [ready, setReady] = useState(false);
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const currentDocument = loadDocument();
+    let document = loadDocument();
 
-    if (currentDocument) {
-      setCv(currentDocument);
-      setHasLoaded(true);
-      setSaveState("saved");
-      return;
-    }
+    if (!document) {
+      try {
+        const legacyRaw = window.localStorage.getItem(STORAGE_KEY);
+        if (legacyRaw) {
+          const legacyParsed: unknown = JSON.parse(legacyRaw);
+          const migrated = createDocumentFromLegacyCV(legacyParsed);
 
-    const legacyValue = getLegacyStoredValue();
-
-    if (legacyValue) {
-      let legacyData: unknown = legacyValue;
-
-      if (
-        typeof legacyValue === "object" &&
-        legacyValue !== null &&
-        "data" in legacyValue
-      ) {
-        legacyData = legacyValue.data;
-      }
-
-      const migrated = createDocumentFromLegacyCV(
-        legacyData,
-      );
-
-      if (migrated) {
-        setCv(migrated);
-
-        // Persist the migrated document immediately so the
-        // old format is replaced by the new document model.
-        saveDocument(migrated);
-
-        setHasLoaded(true);
-        setSaveState("saved");
-        return;
+          if (migrated) {
+            document = migrated;
+            saveDocument(migrated);
+          }
+        }
+      } catch {
+        // Ignore malformed legacy data.
       }
     }
 
-    setHasLoaded(true);
-    setSaveState("saved");
+    if (!document) {
+      document = createDefaultDocument();
+    }
+
+    setCv(document);
+    setReady(true);
   }, []);
 
   useEffect(() => {
-    if (!hasLoaded) return;
-
-    setSaveState("saving");
+    if (!ready || !cv) return;
 
     const timeout = window.setTimeout(() => {
-      const saved = saveDocument(cv);
-      setSaveState(saved ? "saved" : "error");
+      saveDocument(cv);
     }, 350);
 
     return () => window.clearTimeout(timeout);
-  }, [cv, hasLoaded]);
+  }, [cv, ready]);
+
+  function updateDocument(nextDocument: CVDocument) {
+    setCv(nextDocument);
+  }
+
+  function handleBasicsChange(field: keyof CVBasics, value: string) {
+    if (!cv) return;
+    updateDocument(updateBasics(cv, field, value));
+  }
+
+  function handleSummaryChange(value: string) {
+    if (!cv) return;
+    updateDocument(updateSummary(cv, value));
+  }
+
+  function handleSkillsChange(value: string) {
+    if (!cv) return;
+
+    const skills = value
+      .split(",")
+      .map((skill) => skill.trim())
+      .filter(Boolean);
+
+    updateDocument(updateSkills(cv, skills));
+  }
+
+  function handleExperienceChange(
+    id: string,
+    field: keyof Experience,
+    value: string,
+  ) {
+    if (!cv) return;
+
+    const experience = getExperience(cv).map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            [field]: value,
+          }
+        : item,
+    );
+
+    updateDocument(updateExperience(cv, experience));
+  }
+
+  function addExperience() {
+    if (!cv) return;
+
+    const experience = [
+      ...getExperience(cv),
+      {
+        id: createItemId("experience"),
+        role: "",
+        company: "",
+        location: "",
+        startDate: "",
+        endDate: "",
+        description: "",
+      },
+    ];
+
+    updateDocument(updateExperience(cv, experience));
+  }
+
+  function removeExperience(id: string) {
+    if (!cv) return;
+
+    updateDocument(
+      updateExperience(
+        cv,
+        getExperience(cv).filter((item) => item.id !== id),
+      ),
+    );
+  }
+
+  function handleEducationChange(
+    id: string,
+    field: keyof Education,
+    value: string,
+  ) {
+    if (!cv) return;
+
+    const education = getEducation(cv).map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            [field]: value,
+          }
+        : item,
+    );
+
+    updateDocument(updateEducation(cv, education));
+  }
+
+  function addEducation() {
+    if (!cv) return;
+
+    const education = [
+      ...getEducation(cv),
+      {
+        id: createItemId("education"),
+        degree: "",
+        school: "",
+        location: "",
+        startDate: "",
+        endDate: "",
+      },
+    ];
+
+    updateDocument(updateEducation(cv, education));
+  }
+
+  function removeEducation(id: string) {
+    if (!cv) return;
+
+    updateDocument(
+      updateEducation(
+        cv,
+        getEducation(cv).filter((item) => item.id !== id),
+      ),
+    );
+  }
+
+  function handleProjectChange(
+    id: string,
+    field: keyof Project,
+    value: string,
+  ) {
+    if (!cv) return;
+
+    const projects = getProjects(cv).map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            [field]: value,
+          }
+        : item,
+    );
+
+    updateDocument(updateProjects(cv, projects));
+  }
+
+  function addProject() {
+    if (!cv) return;
+
+    const projects = [
+      ...getProjects(cv),
+      {
+        id: createItemId("project"),
+        name: "",
+        description: "",
+        link: "",
+      },
+    ];
+
+    updateDocument(updateProjects(cv, projects));
+  }
+
+  function removeProject(id: string) {
+    if (!cv) return;
+
+    updateDocument(
+      updateProjects(
+        cv,
+        getProjects(cv).filter((item) => item.id !== id),
+      ),
+    );
+  }
+
+  function handleCertificationChange(
+    id: string,
+    field: keyof Certification,
+    value: string,
+  ) {
+    if (!cv) return;
+
+    const certifications = getCertifications(cv).map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            [field]: value,
+          }
+        : item,
+    );
+
+    updateDocument(updateCertifications(cv, certifications));
+  }
+
+  function addCertification() {
+    if (!cv) return;
+
+    const certifications = [
+      ...getCertifications(cv),
+      {
+        id: createItemId("certification"),
+        name: "",
+        issuer: "",
+        date: "",
+        link: "",
+      },
+    ];
+
+    updateDocument(updateCertifications(cv, certifications));
+  }
+
+  function removeCertification(id: string) {
+    if (!cv) return;
+
+    updateDocument(
+      updateCertifications(
+        cv,
+        getCertifications(cv).filter((item) => item.id !== id),
+      ),
+    );
+  }
+
+  function resetDocument() {
+    const confirmed = window.confirm(
+      "Reset this CV? All current content will be removed.",
+    );
+
+    if (!confirmed) return;
+
+    const nextDocument = createDefaultDocument();
+    removeDocument();
+    setCv(nextDocument);
+  }
+
+  function exportDocument() {
+    if (!cv) return;
+
+    const payload = JSON.stringify(
+      {
+        version: cv.version,
+        document: cv,
+      },
+      null,
+      2,
+    );
+
+    const blob = new Blob([payload], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = "cv-studio-document.json";
+    anchor.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function importDocument() {
+    fileInputRef.current?.click();
+  }
+
+  function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    setImportError("");
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      try {
+        const parsed: unknown = JSON.parse(String(reader.result));
+
+        let imported: CVDocument | null = null;
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "document" in parsed
+        ) {
+          const wrapped = parsed as {
+            document?: unknown;
+          };
+
+          if (isValidCVDocument(wrapped.document)) {
+            imported = wrapped.document;
+          }
+        } else if (isValidCVDocument(parsed)) {
+          imported = parsed;
+        } else {
+          imported = createDocumentFromLegacyCV(parsed);
+        }
+
+        if (!imported) {
+          setImportError("That file does not contain a valid CV document.");
+          return;
+        }
+
+        setCv({
+          ...imported,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch {
+        setImportError("Could not read that file as JSON.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+
+    reader.onerror = () => {
+      setImportError("Could not read that file.");
+      event.target.value = "";
+    };
+
+    reader.readAsText(file);
+  }
+
+  function printDocument() {
+    window.print();
+  }
+
+  if (!ready || !cv) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f5f5f3] px-6 text-sm text-gray-500">
+        Loading CV Studio…
+      </main>
+    );
+  }
 
   const basics = getBasics(cv);
   const summary = getSummary(cv);
@@ -144,641 +526,512 @@ export default function Home() {
   const projects = getProjects(cv);
   const certifications = getCertifications(cv);
 
-  function updateBasicField(
-    field: keyof CVBasics,
-    value: string,
-  ) {
-    setCv((current) =>
-      updateBasics(current, field, value),
-    );
-  }
-
-  function updateSummaryValue(value: string) {
-    setCv((current) =>
-      updateSectionData(current, "summary", value),
-    );
-  }
-
-  function addSkill() {
-    const skill = skillInput.trim();
-
-    if (!skill) return;
-
-    setCv((current) => {
-      const currentSkills = getSkills(current);
-
-      if (
-        currentSkills.some(
-          (item) =>
-            item.toLowerCase() === skill.toLowerCase(),
-        )
-      ) {
-        return current;
-      }
-
-      return updateSkills(current, [
-        ...currentSkills,
-        skill,
-      ]);
-    });
-
-    setSkillInput("");
-  }
-
-  function removeSkill(skill: string) {
-    setCv((current) =>
-      updateSkills(
-        current,
-        getSkills(current).filter(
-          (item) => item !== skill,
-        ),
-      ),
-    );
-  }
-
-  function addExperience() {
-    setCv((current) =>
-      updateExperience(current, [
-        ...getExperience(current),
-        {
-          id: createId("experience"),
-          role: "",
-          company: "",
-          location: "",
-          startDate: "",
-          endDate: "",
-          description: "",
-        },
-      ]),
-    );
-  }
-
-  function updateExperienceItem(
-    id: string,
-    field: keyof Experience,
-    value: string,
-  ) {
-    setCv((current) =>
-      updateExperience(
-        current,
-        getExperience(current).map((item) =>
-          item.id === id
-            ? { ...item, [field]: value }
-            : item,
-        ),
-      ),
-    );
-  }
-
-  function removeExperience(id: string) {
-    setCv((current) =>
-      updateExperience(
-        current,
-        getExperience(current).filter(
-          (item) => item.id !== id,
-        ),
-      ),
-    );
-  }
-
-  function addEducation() {
-    setCv((current) =>
-      updateEducation(current, [
-        ...getEducation(current),
-        {
-          id: createId("education"),
-          degree: "",
-          school: "",
-          location: "",
-          startDate: "",
-          endDate: "",
-        },
-      ]),
-    );
-  }
-
-  function updateEducationItem(
-    id: string,
-    field: keyof Education,
-    value: string,
-  ) {
-    setCv((current) =>
-      updateEducation(
-        current,
-        getEducation(current).map((item) =>
-          item.id === id
-            ? { ...item, [field]: value }
-            : item,
-        ),
-      ),
-    );
-  }
-
-  function removeEducation(id: string) {
-    setCv((current) =>
-      updateEducation(
-        current,
-        getEducation(current).filter(
-          (item) => item.id !== id,
-        ),
-      ),
-    );
-  }
-
-  function addProject() {
-    setCv((current) =>
-      updateProjects(current, [
-        ...getProjects(current),
-        {
-          id: createId("project"),
-          name: "",
-          description: "",
-          link: "",
-        },
-      ]),
-    );
-  }
-
-  function updateProjectItem(
-    id: string,
-    field: keyof Project,
-    value: string,
-  ) {
-    setCv((current) =>
-      updateProjects(
-        current,
-        getProjects(current).map((item) =>
-          item.id === id
-            ? { ...item, [field]: value }
-            : item,
-        ),
-      ),
-    );
-  }
-
-  function removeProject(id: string) {
-    setCv((current) =>
-      updateProjects(
-        current,
-        getProjects(current).filter(
-          (item) => item.id !== id,
-        ),
-      ),
-    );
-  }
-
-  function addCertification() {
-    setCv((current) =>
-      updateCertifications(current, [
-        ...getCertifications(current),
-        {
-          id: createId("certification"),
-          name: "",
-          issuer: "",
-          date: "",
-          link: "",
-        },
-      ]),
-    );
-  }
-
-  function updateCertificationItem(
-    id: string,
-    field: keyof Certification,
-    value: string,
-  ) {
-    setCv((current) =>
-      updateCertifications(
-        current,
-        getCertifications(current).map((item) =>
-          item.id === id
-            ? { ...item, [field]: value }
-            : item,
-        ),
-      ),
-    );
-  }
-
-  function removeCertification(id: string) {
-    setCv((current) =>
-      updateCertifications(
-        current,
-        getCertifications(current).filter(
-          (item) => item.id !== id,
-        ),
-      ),
-    );
-  }
-
-  function resetCV() {
-    const confirmed = window.confirm(
-      "Reset this CV? All saved CV data in this browser will be deleted.",
-    );
-
-    if (!confirmed) return;
-
-    const nextDocument = createDefaultDocument();
-
-    setCv(nextDocument);
-    setActiveSection("personal");
-    setSkillInput("");
-
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore storage errors. Autosave will attempt to persist
-      // the fresh document again.
-    }
-  }
-
-  function exportJSON() {
-    const validationErrors = validateCVDocument(cv);
-
-    if (validationErrors.length > 0) {
-      window.alert(
-        `This CV cannot be exported because its document data is invalid.\n\n${validationErrors.join(
-          "\n",
-        )}`,
-      );
-      return;
-    }
-
-    const blob = new Blob(
-      [JSON.stringify(cv, null, 2)],
-      {
-        type: "application/json",
-      },
-    );
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `${cv.name
-      .trim()
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase() || "cv-studio-document"}.json`;
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    URL.revokeObjectURL(url);
-  }
-
-  function openImportPicker() {
-    importInputRef.current?.click();
-  }
-
-  async function importJSON(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const parsed: unknown = JSON.parse(text);
-
-      let importedDocument: CVDocument | null =
-        null;
-
-      if (isValidCVDocument(parsed)) {
-        importedDocument = parsed;
-      } else if (
-        parsed &&
-        typeof parsed === "object" &&
-        "document" in parsed &&
-        isValidCVDocument(parsed.document)
-      ) {
-        importedDocument = parsed.document;
-      }
-
-      if (!importedDocument) {
-        const errors = validateCVDocument(parsed);
-
-        window.alert(
-          `This file is not a valid CV Studio document.${
-            errors.length
-              ? `\n\n${errors.join("\n")}`
-              : ""
-          }`,
-        );
-
-        return;
-      }
-
-      const normalizedDocument: CVDocument = {
-        ...importedDocument,
-        updatedAt: new Date().toISOString(),
-      };
-
-      setCv(normalizedDocument);
-      setActiveSection("personal");
-      setSkillInput("");
-    } catch {
-      window.alert(
-        "The selected file could not be imported. Make sure it is valid JSON and was exported from CV Studio.",
-      );
-    } finally {
-      event.target.value = "";
-    }
-  }
-
-  function printCV() {
-    window.print();
-  }
-
-  const navigation = [
-    ["personal", "Personal"],
-    ["experience", "Experience"],
-    ["education", "Education"],
-    ["skills", "Skills"],
-    ["projects", "Projects"],
-    ["certifications", "Certifications"],
-  ];
-
   return (
-    <main className="min-h-screen bg-[#f5f5f3] text-[#171717]">
-      <header className="cv-app-header sticky top-0 z-30 border-b border-[#deded9] bg-[#f5f5f3]/95 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-16 max-w-[1500px] items-center justify-between gap-4 px-5 lg:px-8">
+    <main className="min-h-screen bg-[#f5f5f3]">
+      <header className="cv-app-header sticky top-0 z-20 border-b border-gray-200 bg-[#f5f5f3]/95 backdrop-blur print:hidden">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#73736e]">
+            <h1 className="text-base font-semibold tracking-tight text-gray-900">
               CV Studio
-            </p>
-
-            <h1 className="text-lg font-semibold tracking-tight">
-              Create your CV
             </h1>
+            <p className="text-xs text-gray-500">
+              Your document stays in this browser.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-[#777] sm:inline">
-              {saveState === "loading" && "Loading…"}
-              {saveState === "saving" && "Saving…"}
-              {saveState === "saved" && "Saved locally"}
-              {saveState === "error" && "Save failed"}
-            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
 
             <button
               type="button"
-              onClick={exportJSON}
-              className="hidden rounded-md border border-[#c9c9c3] bg-white px-3 py-2 text-xs font-medium transition hover:border-[#999] sm:inline-flex"
-            >
-              Export
-            </button>
-
-            <button
-              type="button"
-              onClick={openImportPicker}
-              className="hidden rounded-md border border-[#c9c9c3] bg-white px-3 py-2 text-xs font-medium transition hover:border-[#999] sm:inline-flex"
+              onClick={importDocument}
+              className="border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition hover:border-gray-500 hover:text-gray-900"
             >
               Import
             </button>
 
             <button
               type="button"
-              onClick={printCV}
-              className="rounded-md bg-[#171717] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#30302d]"
+              onClick={exportDocument}
+              className="border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition hover:border-gray-500 hover:text-gray-900"
             >
-              Save PDF
+              Export
             </button>
 
-            <input
-              ref={importInputRef}
-              type="file"
-              accept="application/json,.json"
-              onChange={importJSON}
-              className="hidden"
-            />
+            <button
+              type="button"
+              onClick={printDocument}
+              className="bg-gray-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-gray-700"
+            >
+              Print / PDF
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] lg:grid-cols-[430px_minmax(0,1fr)]">
-        <aside className="cv-editor-sidebar border-r border-[#deded9] bg-[#f5f5f3] print:hidden lg:min-h-[calc(100vh-4rem)]">
-          <div className="p-5 lg:p-7">
-            <div className="mb-7">
-              <p className="text-sm text-[#73736e]">
-                Build your CV one section at a time.
-              </p>
-            </div>
+      {importError ? (
+        <div className="cv-app-header border-b border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 print:hidden">
+          {importError}
+        </div>
+      ) : null}
 
-            <nav className="mb-8 grid grid-cols-2 gap-1 rounded-lg bg-[#e9e9e5] p-1 sm:grid-cols-3">
-              {navigation.map(([id, label]) => (
+      <div className="cv-layout mx-auto grid max-w-[1500px] lg:grid-cols-[430px_minmax(0,1fr)]">
+        <aside className="cv-editor-sidebar min-h-[calc(100vh-61px)] border-r border-gray-200 bg-[#f5f5f3] print:hidden">
+          <div className="sticky top-[61px] max-h-[calc(100vh-61px)] overflow-y-auto">
+            <EditorSection title="Personal information">
+              <EditorField
+                label="Name"
+                value={basics.name}
+                onChange={(value) => handleBasicsChange("name", value)}
+                placeholder="Your name"
+              />
+
+              <EditorField
+                label="Professional title"
+                value={basics.title}
+                onChange={(value) => handleBasicsChange("title", value)}
+                placeholder="Software Developer"
+              />
+
+              <EditorField
+                label="Email"
+                value={basics.email}
+                onChange={(value) => handleBasicsChange("email", value)}
+                placeholder="you@example.com"
+                type="email"
+              />
+
+              <EditorField
+                label="Phone"
+                value={basics.phone}
+                onChange={(value) => handleBasicsChange("phone", value)}
+                placeholder="+234..."
+              />
+
+              <EditorField
+                label="Location"
+                value={basics.location}
+                onChange={(value) => handleBasicsChange("location", value)}
+                placeholder="Abeokuta, Nigeria"
+              />
+
+              <EditorField
+                label="Website"
+                value={basics.website}
+                onChange={(value) => handleBasicsChange("website", value)}
+                placeholder="https://example.com"
+              />
+
+              <EditorField
+                label="LinkedIn"
+                value={basics.linkedin}
+                onChange={(value) => handleBasicsChange("linkedin", value)}
+                placeholder="https://linkedin.com/in/..."
+              />
+            </EditorSection>
+
+            <EditorSection title="Profile">
+              <EditorTextarea
+                label="Summary"
+                value={summary}
+                onChange={handleSummaryChange}
+                placeholder="A concise professional summary..."
+                rows={7}
+              />
+            </EditorSection>
+
+            <EditorSection
+              title="Experience"
+              action={
                 <button
-                  key={id}
                   type="button"
-                  onClick={() => setActiveSection(id)}
-                  className={`rounded-md px-2 py-2 text-xs font-medium transition ${
-                    activeSection === id
-                      ? "bg-white text-[#171717] shadow-sm"
-                      : "text-[#73736e] hover:text-[#171717]"
-                  }`}
+                  onClick={addExperience}
+                  className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
                 >
-                  {label}
+                  Add
                 </button>
-              ))}
-            </nav>
+              }
+            >
+              {experience.length === 0 ? (
+                <EmptyState>
+                  Add your professional experience.
+                </EmptyState>
+              ) : (
+                experience.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="space-y-4 border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                        Experience {index + 1}
+                      </p>
 
-            {activeSection === "personal" && (
-              <div className="space-y-7">
-                <EditorGroup
-                  title="Personal information"
-                  description="The details employers will use to identify and contact you."
-                >
-                  <Field
-                    label="Full name"
-                    value={basics.name}
-                    onChange={(value) =>
-                      updateBasicField("name", value)
-                    }
-                    placeholder="e.g. John Doe"
-                  />
+                      <ItemActions
+                        onRemove={() => removeExperience(item.id)}
+                      />
+                    </div>
 
-                  <Field
-                    label="Professional title"
-                    value={basics.title}
-                    onChange={(value) =>
-                      updateBasicField("title", value)
-                    }
-                    placeholder="e.g. Frontend Developer"
-                  />
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field
-                      label="Email"
-                      value={basics.email}
+                    <EditorField
+                      label="Role"
+                      value={item.role}
                       onChange={(value) =>
-                        updateBasicField("email", value)
+                        handleExperienceChange(item.id, "role", value)
                       }
-                      placeholder="you@example.com"
+                      placeholder="Software Developer"
                     />
 
-                    <Field
-                      label="Phone"
-                      value={basics.phone}
+                    <EditorField
+                      label="Company"
+                      value={item.company}
                       onChange={(value) =>
-                        updateBasicField("phone", value)
+                        handleExperienceChange(item.id, "company", value)
                       }
-                      placeholder="+234..."
+                      placeholder="Company name"
                     />
-                  </div>
 
-                  <Field
-                    label="Location"
-                    value={basics.location}
-                    onChange={(value) =>
-                      updateBasicField(
-                        "location",
-                        value,
-                      )
-                    }
-                    placeholder="City, Country"
-                  />
-
-                  <Field
-                    label="Website"
-                    value={basics.website}
-                    onChange={(value) =>
-                      updateBasicField(
-                        "website",
-                        value,
-                      )
-                    }
-                    placeholder="yourwebsite.com"
-                  />
-
-                  <Field
-                    label="LinkedIn"
-                    value={basics.linkedin}
-                    onChange={(value) =>
-                      updateBasicField(
-                        "linkedin",
-                        value,
-                      )
-                    }
-                    placeholder="linkedin.com/in/..."
-                  />
-                </EditorGroup>
-
-                <EditorGroup
-                  title="Professional summary"
-                  description="A short introduction that tells an employer what you bring."
-                >
-                  <Textarea
-                    value={summary}
-                    onChange={updateSummaryValue}
-                    placeholder="Write 2–4 sentences about your professional background, strengths and focus."
-                  />
-                </EditorGroup>
-
-                <div className="border-t border-[#deded9] pt-6">
-                  <button
-                    type="button"
-                    onClick={resetCV}
-                    className="w-full border border-[#d1bcbc] bg-white px-4 py-2.5 text-sm font-medium text-[#7d3838] transition hover:border-[#a66] hover:bg-[#fffafa]"
-                  >
-                    Reset CV
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activeSection === "experience" && (
-              <ExperienceEditor
-                items={experience}
-                onAdd={addExperience}
-                onUpdate={updateExperienceItem}
-                onRemove={removeExperience}
-              />
-            )}
-
-            {activeSection === "education" && (
-              <EducationEditor
-                items={education}
-                onAdd={addEducation}
-                onUpdate={updateEducationItem}
-                onRemove={removeEducation}
-              />
-            )}
-
-            {activeSection === "skills" && (
-              <EditorGroup
-                title="Skills"
-                description="Add the skills that are relevant to the role you're applying for."
-              >
-                <div className="flex gap-2">
-                  <input
-                    value={skillInput}
-                    onChange={(event) =>
-                      setSkillInput(event.target.value)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addSkill();
+                    <EditorField
+                      label="Location"
+                      value={item.location}
+                      onChange={(value) =>
+                        handleExperienceChange(item.id, "location", value)
                       }
-                    }}
-                    placeholder="e.g. TypeScript"
-                    className="min-w-0 flex-1 border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#777]"
-                  />
+                      placeholder="Lagos, Nigeria"
+                    />
 
-                  <button
-                    type="button"
-                    onClick={addSkill}
-                    className="bg-[#171717] px-4 text-sm font-medium text-white"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {skills.map((skill) => (
-                      <button
-                        key={skill}
-                        type="button"
-                        onClick={() =>
-                          removeSkill(skill)
+                    <div className="grid grid-cols-2 gap-3">
+                      <EditorField
+                        label="Start"
+                        value={item.startDate}
+                        onChange={(value) =>
+                          handleExperienceChange(
+                            item.id,
+                            "startDate",
+                            value,
+                          )
                         }
-                        className="border border-[#d2d2cc] bg-white px-3 py-1.5 text-xs hover:border-[#999]"
-                        title="Remove skill"
-                      >
-                        {skill} ×
-                      </button>
-                    ))}
+                        placeholder="2024"
+                      />
+
+                      <EditorField
+                        label="End"
+                        value={item.endDate}
+                        onChange={(value) =>
+                          handleExperienceChange(
+                            item.id,
+                            "endDate",
+                            value,
+                          )
+                        }
+                        placeholder="Present"
+                      />
+                    </div>
+
+                    <EditorTextarea
+                      label="Description"
+                      value={item.description}
+                      onChange={(value) =>
+                        handleExperienceChange(
+                          item.id,
+                          "description",
+                          value,
+                        )
+                      }
+                      placeholder="Describe your responsibilities and results..."
+                      rows={6}
+                    />
                   </div>
-                )}
+                ))
+              )}
+            </EditorSection>
 
-                {skills.length === 0 && (
-                  <EmptyText>
-                    No skills added yet. Add your most
-                    relevant skills.
-                  </EmptyText>
-                )}
-              </EditorGroup>
-            )}
+            <EditorSection
+              title="Education"
+              action={
+                <button
+                  type="button"
+                  onClick={addEducation}
+                  className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
+                >
+                  Add
+                </button>
+              }
+            >
+              {education.length === 0 ? (
+                <EmptyState>
+                  Add your education history.
+                </EmptyState>
+              ) : (
+                education.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="space-y-4 border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                        Education {index + 1}
+                      </p>
 
-            {activeSection === "projects" && (
-              <ProjectEditor
-                items={projects}
-                onAdd={addProject}
-                onUpdate={updateProjectItem}
-                onRemove={removeProject}
+                      <ItemActions
+                        onRemove={() => removeEducation(item.id)}
+                      />
+                    </div>
+
+                    <EditorField
+                      label="Degree / qualification"
+                      value={item.degree}
+                      onChange={(value) =>
+                        handleEducationChange(item.id, "degree", value)
+                      }
+                      placeholder="B.Sc. Computer Science"
+                    />
+
+                    <EditorField
+                      label="School"
+                      value={item.school}
+                      onChange={(value) =>
+                        handleEducationChange(item.id, "school", value)
+                      }
+                      placeholder="University name"
+                    />
+
+                    <EditorField
+                      label="Location"
+                      value={item.location}
+                      onChange={(value) =>
+                        handleEducationChange(
+                          item.id,
+                          "location",
+                          value,
+                        )
+                      }
+                      placeholder="Ogun, Nigeria"
+                    />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <EditorField
+                        label="Start"
+                        value={item.startDate}
+                        onChange={(value) =>
+                          handleEducationChange(
+                            item.id,
+                            "startDate",
+                            value,
+                          )
+                        }
+                        placeholder="2020"
+                      />
+
+                      <EditorField
+                        label="End"
+                        value={item.endDate}
+                        onChange={(value) =>
+                          handleEducationChange(
+                            item.id,
+                            "endDate",
+                            value,
+                          )
+                        }
+                        placeholder="2024"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </EditorSection>
+
+            <EditorSection title="Skills">
+              <EditorTextarea
+                label="Skills"
+                value={skills.join(", ")}
+                onChange={handleSkillsChange}
+                placeholder="TypeScript, React, Next.js, Git..."
+                rows={5}
               />
-            )}
 
-            {activeSection === "certifications" && (
-              <CertificationEditor
-                items={certifications}
-                onAdd={addCertification}
-                onUpdate={updateCertificationItem}
-                onRemove={removeCertification}
-              />
-            )}
+              <p className="text-xs leading-relaxed text-gray-500">
+                Separate skills with commas.
+              </p>
+            </EditorSection>
+
+            <EditorSection
+              title="Projects"
+              action={
+                <button
+                  type="button"
+                  onClick={addProject}
+                  className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
+                >
+                  Add
+                </button>
+              }
+            >
+              {projects.length === 0 ? (
+                <EmptyState>
+                  Add projects that demonstrate your work.
+                </EmptyState>
+              ) : (
+                projects.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="space-y-4 border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                        Project {index + 1}
+                      </p>
+
+                      <ItemActions
+                        onRemove={() => removeProject(item.id)}
+                      />
+                    </div>
+
+                    <EditorField
+                      label="Name"
+                      value={item.name}
+                      onChange={(value) =>
+                        handleProjectChange(item.id, "name", value)
+                      }
+                      placeholder="Project name"
+                    />
+
+                    <EditorTextarea
+                      label="Description"
+                      value={item.description}
+                      onChange={(value) =>
+                        handleProjectChange(
+                          item.id,
+                          "description",
+                          value,
+                        )
+                      }
+                      placeholder="What did you build?"
+                      rows={5}
+                    />
+
+                    <EditorField
+                      label="Link"
+                      value={item.link}
+                      onChange={(value) =>
+                        handleProjectChange(item.id, "link", value)
+                      }
+                      placeholder="https://github.com/..."
+                    />
+                  </div>
+                ))
+              )}
+            </EditorSection>
+
+            <EditorSection
+              title="Certifications"
+              action={
+                <button
+                  type="button"
+                  onClick={addCertification}
+                  className="text-xs font-medium text-gray-900 underline decoration-gray-300 underline-offset-4 hover:decoration-gray-900"
+                >
+                  Add
+                </button>
+              }
+            >
+              {certifications.length === 0 ? (
+                <EmptyState>
+                  Add certifications, courses, or credentials.
+                </EmptyState>
+              ) : (
+                certifications.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="space-y-4 border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-400">
+                        Certification {index + 1}
+                      </p>
+
+                      <ItemActions
+                        onRemove={() =>
+                          removeCertification(item.id)
+                        }
+                      />
+                    </div>
+
+                    <EditorField
+                      label="Name"
+                      value={item.name}
+                      onChange={(value) =>
+                        handleCertificationChange(
+                          item.id,
+                          "name",
+                          value,
+                        )
+                      }
+                      placeholder="Certification name"
+                    />
+
+                    <EditorField
+                      label="Issuer"
+                      value={item.issuer}
+                      onChange={(value) =>
+                        handleCertificationChange(
+                          item.id,
+                          "issuer",
+                          value,
+                        )
+                      }
+                      placeholder="Issuing organization"
+                    />
+
+                    <EditorField
+                      label="Date"
+                      value={item.date}
+                      onChange={(value) =>
+                        handleCertificationChange(
+                          item.id,
+                          "date",
+                          value,
+                        )
+                      }
+                      placeholder="2026"
+                    />
+
+                    <EditorField
+                      label="Link"
+                      value={item.link}
+                      onChange={(value) =>
+                        handleCertificationChange(
+                          item.id,
+                          "link",
+                          value,
+                        )
+                      }
+                      placeholder="https://..."
+                    />
+                  </div>
+                ))
+              )}
+            </EditorSection>
+
+            <EditorSection title="Document">
+              <button
+                type="button"
+                onClick={resetDocument}
+                className="w-full border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 transition hover:border-red-300 hover:text-red-600"
+              >
+                Reset CV
+              </button>
+            </EditorSection>
+
+            <div className="px-5 py-6 text-xs leading-relaxed text-gray-400">
+              Changes are saved automatically in this browser. Use Export
+              to keep a portable backup.
+            </div>
           </div>
         </aside>
 
@@ -789,574 +1042,5 @@ export default function Home() {
         </section>
       </div>
     </main>
-  );
-}
-
-function ExperienceEditor({
-  items,
-  onAdd,
-  onUpdate,
-  onRemove,
-}: {
-  items: Experience[];
-  onAdd: () => void;
-  onUpdate: (
-    id: string,
-    field: keyof Experience,
-    value: string,
-  ) => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <EditorGroup
-      title="Experience"
-      description="Start with your most recent or most relevant work experience."
-    >
-      <AddButton onClick={onAdd}>
-        Add experience
-      </AddButton>
-
-      {items.length === 0 && (
-        <EmptyText>
-          No experience added yet.
-        </EmptyText>
-      )}
-
-      {items.map((item, index) => (
-        <div
-          key={item.id}
-          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
-              Experience {index + 1}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="text-xs text-[#8a3b3b] hover:underline"
-            >
-              Remove
-            </button>
-          </div>
-
-          <Field
-            label="Role"
-            value={item.role}
-            onChange={(value) =>
-              onUpdate(item.id, "role", value)
-            }
-            placeholder="e.g. Frontend Developer"
-          />
-
-          <Field
-            label="Company"
-            value={item.company}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "company",
-                value,
-              )
-            }
-            placeholder="Company name"
-          />
-
-          <Field
-            label="Location"
-            value={item.location}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "location",
-                value,
-              )
-            }
-            placeholder="City, Country"
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Start"
-              value={item.startDate}
-              onChange={(value) =>
-                onUpdate(
-                  item.id,
-                  "startDate",
-                  value,
-                )
-              }
-              placeholder="Jan 2024"
-            />
-
-            <Field
-              label="End"
-              value={item.endDate}
-              onChange={(value) =>
-                onUpdate(
-                  item.id,
-                  "endDate",
-                  value,
-                )
-              }
-              placeholder="Present"
-            />
-          </div>
-
-          <Textarea
-            label="Description"
-            value={item.description}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "description",
-                value,
-              )
-            }
-            placeholder="Describe your responsibilities, achievements and measurable results."
-          />
-        </div>
-      ))}
-    </EditorGroup>
-  );
-}
-
-function EducationEditor({
-  items,
-  onAdd,
-  onUpdate,
-  onRemove,
-}: {
-  items: Education[];
-  onAdd: () => void;
-  onUpdate: (
-    id: string,
-    field: keyof Education,
-    value: string,
-  ) => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <EditorGroup
-      title="Education"
-      description="Add your relevant academic or professional qualifications."
-    >
-      <AddButton onClick={onAdd}>
-        Add education
-      </AddButton>
-
-      {items.length === 0 && (
-        <EmptyText>
-          No education added yet.
-        </EmptyText>
-      )}
-
-      {items.map((item, index) => (
-        <div
-          key={item.id}
-          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
-              Education {index + 1}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="text-xs text-[#8a3b3b] hover:underline"
-            >
-              Remove
-            </button>
-          </div>
-
-          <Field
-            label="Degree / qualification"
-            value={item.degree}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "degree",
-                value,
-              )
-            }
-            placeholder="e.g. B.Sc. Computer Science"
-          />
-
-          <Field
-            label="School / institution"
-            value={item.school}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "school",
-                value,
-              )
-            }
-            placeholder="Institution name"
-          />
-
-          <Field
-            label="Location"
-            value={item.location}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "location",
-                value,
-              )
-            }
-            placeholder="City, Country"
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Start"
-              value={item.startDate}
-              onChange={(value) =>
-                onUpdate(
-                  item.id,
-                  "startDate",
-                  value,
-                )
-              }
-              placeholder="2020"
-            />
-
-            <Field
-              label="End"
-              value={item.endDate}
-              onChange={(value) =>
-                onUpdate(
-                  item.id,
-                  "endDate",
-                  value,
-                )
-              }
-              placeholder="2024"
-            />
-          </div>
-        </div>
-      ))}
-    </EditorGroup>
-  );
-}
-
-function ProjectEditor({
-  items,
-  onAdd,
-  onUpdate,
-  onRemove,
-}: {
-  items: Project[];
-  onAdd: () => void;
-  onUpdate: (
-    id: string,
-    field: keyof Project,
-    value: string,
-  ) => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <EditorGroup
-      title="Projects"
-      description="Showcase relevant work, personal projects or major accomplishments."
-    >
-      <AddButton onClick={onAdd}>
-        Add project
-      </AddButton>
-
-      {items.length === 0 && (
-        <EmptyText>
-          No projects added yet.
-        </EmptyText>
-      )}
-
-      {items.map((item, index) => (
-        <div
-          key={item.id}
-          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
-              Project {index + 1}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="text-xs text-[#8a3b3b] hover:underline"
-            >
-              Remove
-            </button>
-          </div>
-
-          <Field
-            label="Project name"
-            value={item.name}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "name",
-                value,
-              )
-            }
-            placeholder="Project name"
-          />
-
-          <Textarea
-            label="Description"
-            value={item.description}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "description",
-                value,
-              )
-            }
-            placeholder="What did you build, improve or accomplish?"
-          />
-
-          <Field
-            label="Link"
-            value={item.link}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "link",
-                value,
-              )
-            }
-            placeholder="https://..."
-          />
-        </div>
-      ))}
-    </EditorGroup>
-  );
-}
-
-function CertificationEditor({
-  items,
-  onAdd,
-  onUpdate,
-  onRemove,
-}: {
-  items: Certification[];
-  onAdd: () => void;
-  onUpdate: (
-    id: string,
-    field: keyof Certification,
-    value: string,
-  ) => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <EditorGroup
-      title="Certifications"
-      description="Add professional certifications, courses or credentials."
-    >
-      <AddButton onClick={onAdd}>
-        Add certification
-      </AddButton>
-
-      {items.length === 0 && (
-        <EmptyText>
-          No certifications added yet.
-        </EmptyText>
-      )}
-
-      {items.map((item, index) => (
-        <div
-          key={item.id}
-          className="space-y-4 border border-[#d7d7d1] bg-white p-4"
-        >
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#666]">
-              Certification {index + 1}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => onRemove(item.id)}
-              className="text-xs text-[#8a3b3b] hover:underline"
-            >
-              Remove
-            </button>
-          </div>
-
-          <Field
-            label="Certification"
-            value={item.name}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "name",
-                value,
-              )
-            }
-            placeholder="Certification name"
-          />
-
-          <Field
-            label="Issuer"
-            value={item.issuer}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "issuer",
-                value,
-              )
-            }
-            placeholder="Issuing organization"
-          />
-
-          <Field
-            label="Date"
-            value={item.date}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "date",
-                value,
-              )
-            }
-            placeholder="2025"
-          />
-
-          <Field
-            label="Link"
-            value={item.link}
-            onChange={(value) =>
-              onUpdate(
-                item.id,
-                "link",
-                value,
-              )
-            }
-            placeholder="https://..."
-          />
-        </div>
-      ))}
-    </EditorGroup>
-  );
-}
-
-function EditorGroup({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-4">
-        <h2 className="text-sm font-semibold tracking-tight">
-          {title}
-        </h2>
-
-        <p className="mt-1 text-xs leading-5 text-[#7a7a74]">
-          {description}
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function AddButton({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full border border-[#bdbdb7] bg-white px-4 py-2.5 text-sm font-medium transition hover:border-[#777] hover:bg-[#fafaf8]"
-    >
-      + {children}
-    </button>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[11px] font-medium text-[#555]">
-        {label}
-      </span>
-
-      <input
-        value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
-        placeholder={placeholder}
-        className="w-full border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
-      />
-    </label>
-  );
-}
-
-function Textarea({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label?: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      {label && (
-        <span className="mb-1.5 block text-[11px] font-medium text-[#555]">
-          {label}
-        </span>
-      )}
-
-      <textarea
-        value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
-        placeholder={placeholder}
-        rows={6}
-        className="w-full resize-y border border-[#d2d2cc] bg-white px-3 py-2.5 text-sm leading-6 outline-none transition placeholder:text-[#aaa] focus:border-[#777]"
-      />
-    </label>
-  );
-}
-
-function EmptyText({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <p className="border border-dashed border-[#d2d2cc] px-4 py-4 text-xs leading-5 text-[#777]">
-      {children}
-    </p>
   );
 }
