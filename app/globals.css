@@ -62,9 +62,16 @@ body {
   }
 
   .cv-app-header,
-.cv-editor-sidebar {
-  display: none !important;
-}
+  .cv-editor-sidebar {
+    display: none !important;
+  }
+
+  .cv-layout {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
 
   .cv-print-root {
     display: block !important;
