@@ -26,13 +26,14 @@ body {
 }
 
 .cv-section-keep-together {
-  break-inside: avoid;
-  page-break-inside: avoid;
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .cv-entry-keep-together {
   break-inside: avoid;
   page-break-inside: avoid;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1023px) {
@@ -103,7 +104,16 @@ body {
 
   .cv-section-keep-together,
   .cv-entry-keep-together {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .cv-entry-keep-together {
+    overflow-wrap: anywhere;
+  }
+
+  .cv-section-keep-together > h2 {
+    break-after: avoid;
+    page-break-after: avoid;
   }
 }
